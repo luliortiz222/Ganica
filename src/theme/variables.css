@@ -1,2 +1,52 @@
-/* For information on how to create your own theme, please refer to:
-http://ionicframework.com/docs/theming/ */
+/* Verde orgánico */
+:root {
+  --ion-color-primary: #2e7d32;
+  --ion-color-primary-rgb: 46, 125, 50;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #286e2c;
+  --ion-color-primary-tint: #438a47;
+}
+
+/* Modo Oscuro - Rojo*/
+html.dark,
+body.dark,
+.ion-palette-dark {
+  --ion-color-primary: #c06161;
+  --ion-color-primary-rgb: 192, 97, 97;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #cf3d3d;
+  --ion-color-primary-tint: #bb4848;
+
+  --ion-background-color: #121212;
+  --ion-background-color-rgb: 18, 18, 18;
+
+  --ion-text-color: #ffffff;
+  --ion-text-color-rgb: 255, 255, 255;
+
+  --ion-card-background: #1e1e1e;
+  --ion-item-background: #1e1e1e;
+}
+
+/* Títulos y textos en tarjetas */
+html.dark ion-card-title,
+body.dark ion-card-title {
+  color: #ffffff;
+}
+
+html.dark ion-card-subtitle,
+body.dark ion-card-subtitle {
+  color: #b3b3b3;
+}
+
+html.dark ion-card-content,
+body.dark ion-card-content {
+  color: #e0e0e0;
+}
+
+.app-titulo-ganica {
+  color: var(--ion-color-primary);
+  font-weight: bold;
+}
+
