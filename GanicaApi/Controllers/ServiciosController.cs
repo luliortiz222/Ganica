@@ -1,6 +1,7 @@
  using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using GanicaApi.Data;
+using Microsoft.AspNetCore.Authorization;
 using GanicaApi.Models; // Asegúrate de que coincida con el namespace de tu modelo ServicioRecoleccion
 
 namespace GanicaApi.Controllers;
@@ -17,6 +18,7 @@ public class ServiciosController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous] // <-- Permitimos ver la lista sin estar logueado para destrabar la vista
     public async Task<IActionResult> GetServicios(CancellationToken ct)
     {
         var servicios = await _context.ServiciosRecoleccion

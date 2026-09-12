@@ -41,27 +41,38 @@ builder.Services.AddAuthentication(options =>
     options.Events = new JwtBearerEvents
     {
         OnTokenValidated = async context =>
+{
+    try 
+    {
+        var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+        var userIdClaim = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
         {
-            var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
-            var userIdClaim = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
-            if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-            {
-                context.Fail("Token inválido.");
-                return;
-            }
-
-            var usuario = await db.Usuarios.AsNoTracking()
-                .Where(x => x.Id == userId)
-                .Select(x => new { x.Activo, x.RolId })
-                .FirstOrDefaultAsync();
-
-            if (usuario is null || !usuario.Activo)
-            {
-                context.Fail("El usuario ya no está activo.");
-                return;
-            }
+            Console.WriteLine("DEBUG JWT: Claims de usuario vacíos o inválidos.");
+            context.Fail("Token inválido.");
+            return;
         }
+
+        var usuario = await db.Usuarios.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => new { x.Activo, x.RolId })
+            .FirstOrDefaultAsync();
+
+        if (usuario is null || !usuario.Activo)
+        {
+            Console.WriteLine($"DEBUG JWT: Usuario ID {userId} no encontrado o inactivo en BD.");
+            context.Fail("El usuario ya no está activo.");
+            return;
+        }
+        Console.WriteLine($"DEBUG JWT: Usuario ID {userId} validado con éxito en BD.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"DEBUG JWT EXCEPTION: {ex.Message}");
+        context.Fail("Error interno validando usuario.");
+    }
+}
     };
 });
 

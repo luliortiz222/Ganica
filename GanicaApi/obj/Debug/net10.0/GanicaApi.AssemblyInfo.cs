@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GanicaApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cd3d252fa7ce8e7bcb256a62cb80a2ac1c8dfb8d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+447c801ea9c2d9e1ed004ed8a0f7814b0118ca1f")]
 [assembly: System.Reflection.AssemblyProductAttribute("GanicaApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GanicaApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

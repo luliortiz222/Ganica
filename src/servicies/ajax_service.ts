@@ -25,13 +25,24 @@ export async function ajax_request<T = any>(
     controller.abort();
   }, 5000);
 
-  try {
+  // Recuperamos el token del almacenamiento local (ajustá la clave si usas otra, ej: 'token')
+  const token = localStorage.getItem('token');
+  console.log("TOKEN ENVIADO:", token); // <-- Agregá esto para ver si lo lee
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  try {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
       headers: {
-        "Content-Type": "application/json",
+        ...headers,
         ...options.headers,
       },
     });
@@ -41,7 +52,6 @@ export async function ajax_request<T = any>(
 
       try {
         const errorData = await response.json();
-        // Captura el objeto { mensaje: "..." } o { message: "..." } devuelto por .NET
         if (errorData?.mensaje) {
           mensajeError = errorData.mensaje;
         } else if (errorData?.message) {
