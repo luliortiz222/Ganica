@@ -77,7 +77,8 @@
               <ion-input 
                 v-model="perfil.direccion" 
                 label="Dirección principal" 
-                label-placement="stacked" 
+                label-placement="stacked"
+                :disabled="esSinRol" 
               />
             </ion-item>
 
@@ -94,10 +95,11 @@
             </ion-item>
           </ion-list>
 
-          <ion-button expand="block" color="success" class="ion-margin-top" @click="guardarPerfil">
-            <ion-icon :icon="saveOutline" slot="start" />
-            Guardar Cambios
-          </ion-button>
+          <!-- El botón se deshabilita si es un usuario sin rol -->
+<ion-button expand="block" color="success" class="ion-margin-top" :disabled="esSinRol" @click="guardarPerfil">
+  <ion-icon :icon="saveOutline" slot="start" />
+  Guardar Cambios
+</ion-button>
 
           <ion-button expand="block" color="danger" class="ion-margin-top" @click="cerrarSesion">
             Cerrar Sesión
@@ -136,10 +138,12 @@ const usuarioInfo = ref({
 });
 
 const perfil = ref({
-  nombre: 'Lourdes Ortiz',
-  direccion: 'Av. Mitre 1234',
+  nombre: '',
+  direccion: '',
   notificaciones: true
 });
+
+const esSinRol = ref(false);
 
 onMounted(() => {
   esOscuro.value = obtenerTemaGuardado();
@@ -158,8 +162,16 @@ const verificarSesion = () => {
     if (userStr) {
       try {
         usuarioInfo.value = JSON.parse(userStr);
+        // Si no tiene rol, marcamos la bandera en true
+        esSinRol.value = !usuarioInfo.value.rol || usuarioInfo.value.rol === 'Sin rol asignado';
+        
+        // Opcional: autocompletar el nombre con el email si no hay otro dato
+        if (!perfil.value.nombre) {
+          perfil.value.nombre = usuarioInfo.value.email;
+        }
       } catch (e) {
         usuarioInfo.value = { email: '', rol: '' };
+        esSinRol.value = true;
       }
     }
   }

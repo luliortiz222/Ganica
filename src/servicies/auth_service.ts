@@ -55,6 +55,7 @@ export const authService = {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("usuario");
+    localStorage.removeItem("ganica_perfil_usuario");
   },
 
   obtenerToken(): string | null {
