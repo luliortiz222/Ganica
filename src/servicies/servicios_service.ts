@@ -3,7 +3,7 @@ import type { Servicio } from "@/stores/servicios_store";
 
 export async function obtener_servicios_api() {
   try {
-    const respuesta = await ajax_request("api/servicios");
+    const respuesta = await ajax_request("servicios");
     return respuesta;
   } catch (error) {
     console.error("Error devuelto por ajax_request en servicios_service:", error);
@@ -27,7 +27,7 @@ export async function crear_servicio_api(servicio: Partial<Servicio>) {
 // PUT: Modificación de servicio
 export async function actualizar_servicio_api(id: string | number, servicio: Partial<Servicio>) {
   try {
-    return await ajax_request<Servicio>(`api/servicios/${id}`, {
+    return await ajax_request<Servicio>(`servicios/${id}`, {
       method: "PUT",
       body: JSON.stringify(servicio)
     });
@@ -40,7 +40,7 @@ export async function actualizar_servicio_api(id: string | number, servicio: Par
 // DELETE: Baja de servicio
 export async function eliminar_servicio_api(id: string | number) {
   try {
-    return await ajax_request<void>(`api/servicios/${id}`, {
+    return await ajax_request<void>(`servicios/${id}`, {
       method: "DELETE"
     });
   } catch (error) {

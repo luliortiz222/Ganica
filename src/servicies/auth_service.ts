@@ -1,3 +1,4 @@
+
 import { obtener_api_url } from "@/config/debug";
 
 export interface LoginRequest {
@@ -7,15 +8,19 @@ export interface LoginRequest {
 
 export interface AuthResponse {
   token: string;
-  refreshToken: string;
-  email: string;
-  rol: string;
+  refresh_token: string;
+  expira_en: string;
+  usuario: {
+    id: number;
+    email: string;
+    rol: string;
+  };
 }
 
 export const authService = {
- async login(credenciales: LoginRequest): Promise<AuthResponse> {
-    // Apuntamos directamente a la URL de tu API de .NET
-    const url = "http://localhost:5193/api/sesion/login";
+  async login(credenciales: LoginRequest): Promise<AuthResponse> {
+    // Usamos la función dinámica para que tome la IP de la red local
+    const url = `${obtener_api_url()}/sesion/login`;
     
     const respuesta = await fetch(url, {
       method: "POST",
@@ -33,8 +38,14 @@ export const authService = {
     
     if (data && data.token) {
       localStorage.setItem("token", data.token);
-      localStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("usuario", JSON.stringify({ email: data.email, rol: data.rol }));
+      localStorage.setItem("refreshToken", data.refresh_token);
+      
+      // Guardamos los datos mapeando correctamente el objeto usuario que viene del backend
+      const rolUsuario = data.usuario?.rol || "Sin rol asignado";
+      localStorage.setItem("usuario", JSON.stringify({ 
+        email: data.usuario.email, 
+        rol: rolUsuario 
+      }));
     }
     
     return data;
