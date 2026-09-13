@@ -95,7 +95,8 @@ import {
   IonButtons, IonMenuButton, IonCard, IonCardContent, 
   IonItem, IonLabel, IonInput, IonTextarea, IonSelect, 
   IonSelectOption, IonButton, IonIcon, IonList, IonBadge, 
-  IonNote, IonRefresher, IonRefresherContent, toastController 
+  IonNote, IonRefresher, IonRefresherContent, toastController,
+  alertController // <-- 1. Importado para manejar el 403
 } from '@ionic/vue';
 import { sendOutline } from 'ionicons/icons';
 
@@ -135,7 +136,33 @@ onMounted(() => {
   cargarSolicitudes();
 });
 
+// <-- 2. Función de validación de permisos de Administrador
+const verificarPermisoAdministrador = async (): Promise<boolean> => {
+  const usuarioGuardado = localStorage.getItem('usuario');
+  if (!usuarioGuardado) return false;
+
+  try {
+    const parsed = JSON.parse(usuarioGuardado);
+    if (parsed.rol !== 'administrador') {
+      const alerta = await alertController.create({
+        header: 'Acceso Denegado (403)',
+        message: 'Las modificaciones en el sistema solo las puede realizar el administrador.',
+        buttons: ['Aceptar']
+      });
+      await alerta.present();
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 const enviarSolicitud = async () => {
+  // <-- 3. Bloquear si no es admin antes de procesar el envío
+  const esAdmin = await verificarPermisoAdministrador();
+  if (!esAdmin) return;
+
   if (!form.value.tipo || !form.value.direccion) return;
 
   const nuevaSolicitud: Solicitud = {

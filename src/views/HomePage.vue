@@ -18,7 +18,8 @@ import {
   IonSkeletonText,
   IonFab,
   IonFabButton,
-  onIonViewWillEnter
+  onIonViewWillEnter,
+  alertController
 } from '@ionic/vue';
 
 import {
@@ -50,19 +51,51 @@ const reintentar = () => {
   servicios_store.cargar_servicios();
 };
 
-// Funciones para abrir el modal (Alta / Modificación)
-const abrirModalNuevo = () => {
+// <-- 2. CREAR LA FUNCIÓN DE VALIDACIÓN DE ADMINISTRADOR
+const verificarPermisoAdministrador = async (): Promise<boolean> => {
+  const usuarioGuardado = localStorage.getItem('usuario');
+  if (!usuarioGuardado) return false;
+
+  try {
+    const parsed = JSON.parse(usuarioGuardado);
+    // Si NO es administrador (es operativo, recolector o sin rol), bloqueamos y mostramos el 403
+    if (parsed.rol !== 'administrador') {
+      const alerta = await alertController.create({
+        header: 'Acceso Denegado (403)',
+        message: 'Las modificaciones en el sistema solo las puede realizar el administrador.',
+        buttons: ['Aceptar']
+      });
+      await alerta.present();
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+// Funciones modificadas para proteger las acciones de modificación (Alta / Modificación / Baja)
+const abrirModalNuevo = async () => {
+  const esAdmin = await verificarPermisoAdministrador();
+  if (!esAdmin) return; // Frena si no es admin
+
   servicioAEditar.value = null;
   modalAbierto.value = true;
 };
 
-const abrirModalEditar = (servicio: Servicio) => {
+const abrirModalEditar = async (servicio: Servicio) => {
+  const esAdmin = await verificarPermisoAdministrador();
+  if (!esAdmin) return; // Frena si no es admin
+
   servicioAEditar.value = servicio;
   modalAbierto.value = true;
 };
 
-// Función para eliminar (Baja)
+// Función para eliminar (Baja) protegida
 const darDeBaja = async (id: string | number) => {
+  const esAdmin = await verificarPermisoAdministrador();
+  if (!esAdmin) return; // Frena si no es admin
+
   if (confirm('¿Estás seguro de que querés dar de baja este servicio?')) {
     await servicios_store.eliminar_servicio(id);
   }

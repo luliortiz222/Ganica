@@ -78,7 +78,6 @@
                 v-model="perfil.direccion" 
                 label="Dirección principal" 
                 label-placement="stacked"
-                :disabled="esSinRol" 
               />
             </ion-item>
 
@@ -95,8 +94,7 @@
             </ion-item>
           </ion-list>
 
-          <!-- El botón se deshabilita si es un usuario sin rol -->
-<ion-button expand="block" color="success" class="ion-margin-top" :disabled="esSinRol" @click="guardarPerfil">
+          <ion-button expand="block" color="success" class="ion-margin-top" @click="guardarPerfil">
   <ion-icon :icon="saveOutline" slot="start" />
   Guardar Cambios
 </ion-button>
@@ -171,7 +169,6 @@ const verificarSesion = () => {
         }
       } catch (e) {
         usuarioInfo.value = { email: '', rol: '' };
-        esSinRol.value = true;
       }
     }
   }
