@@ -26,16 +26,24 @@
           <form @submit.prevent="enviarSolicitud">
             <ion-item lines="full">
               <ion-select 
-                v-model="form.tipo" 
-                label="Tipo de Residuo Especial" 
-                label-placement="stacked" 
-                placeholder="Seleccione una opción" 
-                required
-              >
-                <ion-select-option value="Poda y Escombros">Poda y Escombros</ion-select-option>
-                <ion-select-option value="Electrodomésticos / Voluminosos">Electrodomésticos / Voluminosos</ion-select-option>
-                <ion-select-option value="Aceite Vegetal Usado">Aceite Vegetal Usado</ion-select-option>
-              </ion-select>
+  v-model="form.tipo" 
+  label="Tipo de Residuo Especial" 
+  label-placement="stacked" 
+  placeholder="Seleccione una opción" 
+  required
+>
+  <ion-select-option :value="152">
+    Poda y Escombros
+  </ion-select-option>
+
+  <ion-select-option :value="152">
+    Electrodomésticos / Voluminosos
+  </ion-select-option>
+
+  <ion-select-option :value="152">
+    Aceite Vegetal Usado
+  </ion-select-option>
+</ion-select>
             </ion-item>
 
             <ion-item lines="full">
@@ -99,6 +107,8 @@ import {
   alertController // <-- 1. Importado para manejar el 403
 } from '@ionic/vue';
 import { sendOutline } from 'ionicons/icons';
+import axios from 'axios';
+import { authService } from '@/servicies/auth_service';
 
 interface Solicitud {
   id: number;
@@ -111,7 +121,7 @@ interface Solicitud {
 const SOLICITUDES_KEY = 'ganica_solicitudes';
 
 const form = ref({
-  tipo: '',
+  tipo: null as number | null,
   direccion: '',
   observaciones: ''
 });
@@ -159,31 +169,103 @@ const verificarPermisoAdministrador = async (): Promise<boolean> => {
 };
 
 const enviarSolicitud = async () => {
-  // <-- 3. Bloquear si no es admin antes de procesar el envío
   const esAdmin = await verificarPermisoAdministrador();
+
   if (!esAdmin) return;
 
-  if (!form.value.tipo || !form.value.direccion) return;
+  if (!form.value.tipo || !form.value.direccion) {
+    const toast = await toastController.create({
+      message: 'Completá el tipo de residuo y la dirección.',
+      duration: 2500,
+      color: 'warning',
+      position: 'bottom'
+    });
 
-  const nuevaSolicitud: Solicitud = {
-    id: Date.now(),
-    tipo: form.value.tipo,
-    direccion: form.value.direccion,
-    observaciones: form.value.observaciones,
-    fecha: new Date().toLocaleDateString('es-AR')
-  };
+    await toast.present();
+    return;
+  }
 
-  solicitudes.value.unshift(nuevaSolicitud);
-  localStorage.setItem(SOLICITUDES_KEY, JSON.stringify(solicitudes.value));
+  try {
+    const token = authService.obtenerToken();
 
-  form.value = { tipo: '', direccion: '', observaciones: '' };
+    if (!token) {
+      const toast = await toastController.create({
+        message: 'Tu sesión expiró. Volvé a iniciar sesión.',
+        duration: 2500,
+        color: 'danger',
+        position: 'bottom'
+      });
 
-  const toast = await toastController.create({
-    message: '¡Solicitud registrada con éxito!',
-    duration: 2500,
-    color: 'success',
-    position: 'bottom'
-  });
-  await toast.present();
+      await toast.present();
+      return;
+    }
+
+    console.log('Enviando solicitud:', {
+      servicioRecoleccionId: form.value.tipo,
+      direccion: form.value.direccion,
+      observaciones: form.value.observaciones
+    });
+
+    const response = await axios.post(
+      'http://localhost:5193/api/Solicitudes',
+      {
+        servicioRecoleccionId: form.value.tipo,
+        direccion: form.value.direccion,
+        observaciones: form.value.observaciones
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log('Solicitud creada:', response.data);
+
+    const nuevaSolicitud: Solicitud = {
+      id: response.data.id,
+      tipo: 'Residuos Voluminosos y Poda',
+      direccion: form.value.direccion,
+      observaciones: form.value.observaciones,
+      fecha: new Date().toLocaleDateString('es-AR')
+    };
+
+    solicitudes.value.unshift(nuevaSolicitud);
+
+    localStorage.setItem(
+      SOLICITUDES_KEY,
+      JSON.stringify(solicitudes.value)
+    );
+
+    form.value = {
+      tipo: null,
+      direccion: '',
+      observaciones: ''
+    };
+
+    const toast = await toastController.create({
+      message: '¡Solicitud registrada y enviada a los recolectores!',
+      duration: 2500,
+      color: 'success',
+      position: 'bottom'
+    });
+
+    await toast.present();
+
+  } catch (error: any) {
+    console.error('Error al enviar solicitud:', error);
+    console.error('Status:', error?.response?.status);
+    console.error('Respuesta del servidor:', error?.response?.data);
+
+    const toast = await toastController.create({
+      message: 'No se pudo registrar la solicitud.',
+      duration: 2500,
+      color: 'danger',
+      position: 'bottom'
+    });
+
+    await toast.present();
+  }
 };
 </script>

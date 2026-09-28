@@ -22,6 +22,83 @@ namespace GanicaApi.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("GanicaApi.Models.Entrega", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("AsignadaEn")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal?>("DireccionLatitud")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("DireccionLinea")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal?>("DireccionLongitud")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("DireccionReferencia")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTimeOffset?>("EntregadaEn")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Observaciones")
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("PedidoId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("RepartidorId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Entregas");
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.Notificacion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTimeOffset?>("LeidaEn")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Mensaje")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Notificaciones");
+                });
+
             modelBuilder.Entity("GanicaApi.Models.PuntoRetiro", b =>
                 {
                     b.Property<int>("Id")

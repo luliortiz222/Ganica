@@ -42,12 +42,12 @@ const cargar_servicios = async () => {
   }
 };
 
-const crear_servicio = async (nuevoServicio: Partial<Servicio>) => {
-  await crear_servicio_api(nuevoServicio);
+const crear_servicio = async (datos: FormData | Partial<Servicio>) => {
+  await crear_servicio_api(datos);
   await cargar_servicios();
 };
 
-const editar_servicio = async (id: string | number, datos: Partial<Servicio>) => {
+const editar_servicio = async (id: string | number, datos: FormData | Partial<Servicio>) => {
   await actualizar_servicio_api(id, datos);
   await cargar_servicios();
 };

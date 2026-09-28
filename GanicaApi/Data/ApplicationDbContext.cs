@@ -15,6 +15,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<Usuario> Usuarios { get; set; } = null!;
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
+    public DbSet<Entrega> Entregas { get; set; }
+    public DbSet<Notificacion> Notificaciones { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

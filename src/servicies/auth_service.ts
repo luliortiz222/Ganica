@@ -43,9 +43,10 @@ export const authService = {
       // Guardamos los datos mapeando correctamente el objeto usuario que viene del backend
       const rolUsuario = data.usuario?.rol || "Sin rol asignado";
       localStorage.setItem("usuario", JSON.stringify({ 
-        email: data.usuario.email, 
-        rol: rolUsuario 
-      }));
+  id: data.usuario.id,
+  email: data.usuario.email, 
+  rol: rolUsuario
+}));
     }
     
     return data;

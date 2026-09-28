@@ -14,6 +14,11 @@ import {
   IonToggle
 } from '@ionic/vue';
 import { servicios_store, Servicio } from '@/stores/servicios_store';
+import { tomarFotoParaServicio } from '@/servicies/camara_service';
+import { descargarYCompartirPdf } from '@/servicies/compartir_service';
+import { vibrar_error } from '@/servicies/vibracion_service';
+import { toastController, IonIcon } from '@ionic/vue';
+import { shareSocialOutline } from 'ionicons/icons';
 
 const props = defineProps<{
   abierto: boolean;
@@ -28,6 +33,10 @@ const dias = ref('');
 const horario = ref('');
 const requiereSolicitud = ref(false);
 
+// Estados para la foto de la Unidad 6
+const fotoUrl = ref<string | null>(null);
+const fotoArchivo = ref<File | null>(null);
+
 const errorServidor = ref<string | null>(null);
 const guardando = ref(false);
 
@@ -41,45 +50,92 @@ watch(
       dias.value = nuevo.dias || '';
       horario.value = nuevo.horario || '';
       requiereSolicitud.value = nuevo.requiere_solicitud || false;
+      // Si ya tiene foto guardada en el servidor
+      fotoUrl.value = (nuevo as any).foto_url || (nuevo as any).foto || null;
     } else {
       nombre.value = '';
       descripcion.value = '';
       dias.value = '';
       horario.value = '';
       requiereSolicitud.value = false;
+      fotoUrl.value = null;
+      fotoArchivo.value = null;
     }
     errorServidor.value = null;
   },
   { immediate: true }
 );
 
+// Función para disparar la cámara y manejar permisos nativos
+const capturarFoto = async () => {
+  const rutaWeb = await tomarFotoParaServicio();
+  if (rutaWeb) {
+    fotoUrl.value = rutaWeb;
+    try {
+      const response = await fetch(rutaWeb);
+      const blob = await response.blob();
+      fotoArchivo.value = new File([blob], `servicio_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    } catch (err) {
+      console.error('Error al procesar la foto de la cámara:', err);
+    }
+  }
+};
+
 const guardar = async () => {
   guardando.value = true;
   errorServidor.value = null;
 
   try {
-    const payload = {
-      nombre: nombre.value,
-      descripcion: descripcion.value,
-      dias: dias.value,
-      horario: horario.value,
-      requiere_solicitud: requiereSolicitud.value
-    };
+    // Usamos FormData para empaquetar textos y el archivo binario de la foto
+    const formData = new FormData();
+    formData.append('Nombre', nombre.value);
+    formData.append('Descripcion', descripcion.value);
+    formData.append('Dias', dias.value);
+    formData.append('Horario', horario.value);
+    formData.append('RequiereSolicitud', String(requiereSolicitud.value));
 
-    if (props.servicioEditar?.id) {
-      await servicios_store.editar_servicio(props.servicioEditar.id, payload);
-    } else {
-      await servicios_store.crear_servicio(payload);
+    if (fotoArchivo.value) {
+      formData.append('foto', fotoArchivo.value);
     }
 
-    // Si el servidor responde OK (200/201), cerramos el modal
+    if (props.servicioEditar?.id) {
+      await servicios_store.editar_servicio(props.servicioEditar.id, formData as any);
+    } else {
+      await servicios_store.crear_servicio(formData as any);
+    }
+
+    // Si el servidor responde OK, cerramos el modal
     emit('cerrar');
   } catch (err: any) {
-    // Si el servidor responde 400 u otro error, el modal PERMANECE ABIERTO
-    // y muestra el mensaje de error devuelto por el backend
     errorServidor.value = err?.message || 'Error de validación en el servidor.';
   } finally {
     guardando.value = false;
+  }
+};
+
+const manejarCompartirPdf = async (id: number | undefined, nombreServicio: string) => {
+  if (!id) return;
+  try {
+    await descargarYCompartirPdf(id, nombreServicio);
+  } catch (err: any) {
+    if (err?.response?.status === 409 || err?.status === 409) {
+      const toast = await toastController.create({
+        message: 'No se puede generar el PDF: el registro se encuentra en borrador.',
+        duration: 3000,
+        color: 'warning',
+        position: 'bottom'
+      });
+      await toast.present();
+    } else {
+      const toast = await toastController.create({
+        message: 'Ocurrió un error al intentar generar o compartir el PDF.',
+        duration: 3000,
+        color: 'danger',
+        position: 'bottom'
+      });
+      await toast.present();
+    }
+    vibrar_error();
   }
 };
 </script>
@@ -121,7 +177,33 @@ const guardar = async () => {
         <ion-toggle v-model="requiereSolicitud" slot="end"></ion-toggle>
       </ion-item>
 
-      <!-- Cartel de alerta del servidor (Validación Un. 4) -->
+      <!-- SECCIÓN CÁMARA (Unidad 6) -->
+      <ion-item lines="none" style="margin-top: 15px;">
+        <ion-label position="stacked">Evidencia fotográfica</ion-label>
+      </ion-item>
+      
+      <div class="ion-padding-horizontal">
+        <ion-button expand="block" color="secondary" @click="capturarFoto">
+          📸 Tomar Foto / Abrir Cámara
+        </ion-button>
+
+        <!-- Vista previa de la foto capturada -->
+        <div v-if="fotoUrl" class="contenedor-foto">
+          <img :src="fotoUrl" alt="Vista previa de foto" />
+        </div>
+      </div>
+
+      <ion-button 
+        v-if="servicioEditar?.id" 
+        expand="block" 
+        color="tertiary" 
+        class="ion-margin-top" 
+        @click="manejarCompartirPdf(Number(servicioEditar.id), servicioEditar.nombre || nombre)">
+        <ion-icon slot="start" :icon="shareSocialOutline"></ion-icon>
+        Generar y Compartir Comprobante PDF
+      </ion-button>
+
+      <!-- Cartel de alerta del servidor -->
       <div v-if="errorServidor" class="alerta-error">
         {{ errorServidor }}
       </div>
@@ -143,5 +225,17 @@ const guardar = async () => {
   border-radius: 4px;
   font-size: 14px;
   font-weight: 500;
+}
+
+.contenedor-foto {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.contenedor-foto img {
+  max-height: 160px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--ion-color-step-300, #ccc);
 }
 </style>

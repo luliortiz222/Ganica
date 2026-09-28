@@ -8,6 +8,14 @@ const routes: Array<RouteRecordRaw> = [
     path: '/',
     redirect: '/home'
   },
+
+  {
+    path: '/servicios/:id',
+    name: 'ServicioPublico',
+    component: () => import('@/views/ServicioPublicoPage.vue'),
+    meta: { publica: true }
+  },
+
   ...rutasNavegacion.map((ruta: any) => ({
     path: ruta.path,
     name: ruta.name,
@@ -26,9 +34,9 @@ router.beforeEach((to, from, next) => {
   const meta = to.meta as { publica?: boolean; roles?: string[] };
 
   // 1. Si va a Mi Cuenta, permitimos siempre para que pueda loguearse
-  if (to.path === '/micuenta') {
-    return next();
-  }
+  if (to.path === '/micuenta' || to.meta.publica === true) {
+  return next();
+}
 
   // 2. Si no está autenticado, lo mandamos a Mi Cuenta
   if (!autenticado) {

@@ -11,12 +11,13 @@ export async function obtener_servicios_api() {
   }
 }
 
-// POST: Alta de servicio (Pasa por validación del servidor)
-export async function crear_servicio_api(servicio: Partial<Servicio>) {
+// POST: Alta de servicio (Permite enviar FormData con archivos o JSON)
+export async function crear_servicio_api(datos: FormData | Partial<Servicio>) {
   try {
-    return await ajax_request<Servicio>("api/servicios", {
+    const esFormData = datos instanceof FormData;
+    return await ajax_request<Servicio>("servicios", {
       method: "POST",
-      body: JSON.stringify(servicio)
+      body: esFormData ? datos : JSON.stringify(datos)
     });
   } catch (error) {
     console.error("Error al crear servicio:", error);
@@ -25,11 +26,12 @@ export async function crear_servicio_api(servicio: Partial<Servicio>) {
 }
 
 // PUT: Modificación de servicio
-export async function actualizar_servicio_api(id: string | number, servicio: Partial<Servicio>) {
+export async function actualizar_servicio_api(id: string | number, datos: FormData | Partial<Servicio>) {
   try {
+    const esFormData = datos instanceof FormData;
     return await ajax_request<Servicio>(`servicios/${id}`, {
       method: "PUT",
-      body: JSON.stringify(servicio)
+      body: esFormData ? datos : JSON.stringify(datos)
     });
   } catch (error) {
     console.error("Error al actualizar servicio:", error);

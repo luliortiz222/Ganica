@@ -1,7 +1,5 @@
 import { obtener_api_url } from "@/config/debug";
 
-
-
 function construir_url(endpoint: string): string {
   const api_url = obtener_api_url();
 
@@ -29,9 +27,13 @@ export async function ajax_request<T = any>(
   const token = localStorage.getItem('token');
   console.log("TOKEN ENVIADO:", token); // <-- Agregá esto para ver si lo lee
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const esFormData = options.body instanceof FormData;
+
+  const headers: Record<string, string> = {};
+
+  if (!esFormData) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;

@@ -12,7 +12,7 @@
     <ion-content class="ion-padding">
       <h2 class="app-titulo-ganica">Portal de Autenticación</h2>
 
-      <!-- SI NO ESTÁ AUTENTICADO: MOSTRAR FORMULARIO DE LOGIN -->
+      <!-- SI NO ESTÁ AUTENTICADO: MOSTRAR FORMULARIO DE  -->
       <ion-card v-if="!autenticado">
         <ion-card-header>
           <ion-card-title>Iniciar Sesión</ion-card-title>
@@ -20,7 +20,7 @@
         </ion-card-header>
 
         <ion-card-content>
-          <form @submit.prevent="handleLogin">
+          <form @submit.prevent="handle">
             <ion-list lines="full">
               <ion-item>
                 <ion-input 
@@ -61,7 +61,7 @@
 
         <ion-card-content>
           <div v-if="!usuarioInfo.rol" class="ion-padding-bottom">
-            <p color="warning">Su cuenta está activa pero aún no cuenta con un rol asignado para operar en las secciones del sistema[cite: 1].</p>
+            <p color="warning">Su cuenta está activa pero aún no cuenta con un rol asignado para operar en las secciones del sistema.</p>
           </div>
 
           <ion-list lines="full">
@@ -92,6 +92,12 @@
                 Modo Oscuro
               </ion-toggle>
             </ion-item>
+
+            <ion-item>
+              <ion-toggle :checked="vibracionActiva" @ionChange="cambiarVibracion">
+                Vibración háptica al tacto
+              </ion-toggle>
+            </ion-item>
           </ion-list>
 
           <ion-button expand="block" color="success" class="ion-margin-top" @click="guardarPerfil">
@@ -109,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref,computed, onMounted } from 'vue';
 import { 
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, 
   IonButtons, IonMenuButton, IonCard, IonCardHeader, 
@@ -120,6 +126,22 @@ import {
 import { saveOutline } from 'ionicons/icons';
 import { obtenerTemaGuardado, aplicarTema } from '@/config/tema';
 import { authService } from '@/servicies/auth_service';
+import { vibrar_toque } from '@/servicies/vibracion_service';
+import { use_tema_store } from '../stores/tema_store';
+
+const vibracionActiva = computed(() => {
+  const temaStore = use_tema_store();
+  return temaStore.vibracion_activa;
+});
+
+// Función que maneja el cambio del interruptor
+const cambiarVibracion = (event: CustomEvent) => {
+  const temaStore = use_tema_store();
+  temaStore.alternar_vibracion();
+  if (temaStore.vibracion_activa) {
+    vibrar_toque();
+  }
+};
 
 const PERFIL_KEY = 'ganica_perfil_usuario';
 const esOscuro = ref(false);
@@ -174,17 +196,18 @@ const verificarSesion = () => {
   }
 };
 
-const handleLogin = async () => {
+const handle = async () => {
   try {
     await authService.login(credenciales.value);
     verificarSesion();
-    
+
     const toast = await toastController.create({
       message: '¡Inicio de sesión exitoso!',
       duration: 2000,
       color: 'success',
       position: 'bottom'
     });
+
     await toast.present();
   } catch (error) {
     const toast = await toastController.create({
@@ -193,10 +216,10 @@ const handleLogin = async () => {
       color: 'danger',
       position: 'bottom'
     });
+
     await toast.present();
   }
 };
-
 const cerrarSesion = () => {
   authService.logout();
   autenticado.value = false;

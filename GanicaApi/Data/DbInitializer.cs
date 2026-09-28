@@ -42,6 +42,6 @@ public static class DbInitializer
         };
 
         context.ServiciosRecoleccion.AddRange(servicios);
-        context.SaveChanges();
-    }
-}
+         context.SaveChanges(); 
+         } 
+         }
