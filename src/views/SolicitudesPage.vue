@@ -202,12 +202,12 @@ const enviarSolicitud = async () => {
     console.log('Solicitud creada:', response.data);
 
     const nuevaSolicitud: Solicitud = {
-      id: response.data.id,
-      tipo: 'Residuos Voluminosos y Poda',
-      direccion: form.value.direccion,
-      observaciones: form.value.observaciones,
-      fecha: new Date().toLocaleDateString('es-AR')
-    };
+  id: response.data.id,
+  tipo: form.value.tipo,
+  direccion: form.value.direccion,
+  observaciones: form.value.observaciones,
+  fecha: new Date().toLocaleDateString('es-AR')
+};
 
     solicitudes.value.unshift(nuevaSolicitud);
 
