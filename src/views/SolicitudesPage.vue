@@ -25,22 +25,22 @@
         <ion-card-content>
           <form @submit.prevent="enviarSolicitud">
             <ion-item lines="full">
-              <ion-select 
-  v-model="form.tipo" 
-  label="Tipo de Residuo Especial" 
-  label-placement="stacked" 
-  placeholder="Seleccione una opción" 
+              <ion-select
+  v-model="form.tipo"
+  label="Tipo de Residuo Especial"
+  label-placement="stacked"
+  placeholder="Seleccione una opción"
   required
 >
-  <ion-select-option :value="152">
+  <ion-select-option value="Poda y Escombros">
     Poda y Escombros
   </ion-select-option>
 
-  <ion-select-option :value="152">
+  <ion-select-option value="Electrodomésticos / Voluminosos">
     Electrodomésticos / Voluminosos
   </ion-select-option>
 
-  <ion-select-option :value="152">
+  <ion-select-option value="Aceite Vegetal Usado">
     Aceite Vegetal Usado
   </ion-select-option>
 </ion-select>
@@ -109,6 +109,7 @@ import {
 import { sendOutline } from 'ionicons/icons';
 import axios from 'axios';
 import { authService } from '@/servicies/auth_service';
+import { obtener_api_url } from '@/config/debug';
 
 interface Solicitud {
   id: number;
@@ -121,7 +122,8 @@ interface Solicitud {
 const SOLICITUDES_KEY = 'ganica_solicitudes';
 
 const form = ref({
-  tipo: null as number | null,
+  servicioId: 152,
+  tipo: '',
   direccion: '',
   observaciones: ''
 });
@@ -146,32 +148,8 @@ onMounted(() => {
   cargarSolicitudes();
 });
 
-// <-- 2. Función de validación de permisos de Administrador
-const verificarPermisoAdministrador = async (): Promise<boolean> => {
-  const usuarioGuardado = localStorage.getItem('usuario');
-  if (!usuarioGuardado) return false;
-
-  try {
-    const parsed = JSON.parse(usuarioGuardado);
-    if (parsed.rol !== 'administrador') {
-      const alerta = await alertController.create({
-        header: 'Acceso Denegado (403)',
-        message: 'Las modificaciones en el sistema solo las puede realizar el administrador.',
-        buttons: ['Aceptar']
-      });
-      await alerta.present();
-      return false;
-    }
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
 
 const enviarSolicitud = async () => {
-  const esAdmin = await verificarPermisoAdministrador();
-
-  if (!esAdmin) return;
 
   if (!form.value.tipo || !form.value.direccion) {
     const toast = await toastController.create({
@@ -201,13 +179,13 @@ const enviarSolicitud = async () => {
     }
 
     console.log('Enviando solicitud:', {
-      servicioRecoleccionId: form.value.tipo,
+      servicioRecoleccionId: form.value.servicioId,
       direccion: form.value.direccion,
       observaciones: form.value.observaciones
     });
 
     const response = await axios.post(
-      'http://localhost:5193/api/Solicitudes',
+      `${obtener_api_url()}/api/Solicitudes`,
       {
         servicioRecoleccionId: form.value.tipo,
         direccion: form.value.direccion,
@@ -238,12 +216,12 @@ const enviarSolicitud = async () => {
       JSON.stringify(solicitudes.value)
     );
 
-    form.value = {
-      tipo: null,
-      direccion: '',
-      observaciones: ''
-    };
-
+   form.value = {
+  servicioId: 152,
+  tipo: '',
+  direccion: '',
+  observaciones: ''
+};
     const toast = await toastController.create({
       message: '¡Solicitud registrada y enviada a los recolectores!',
       duration: 2500,
