@@ -24,20 +24,25 @@ public class SolicitudesController : ControllerBase
             .ToListAsync();
     }
 
-    [HttpPost]
+[HttpPost]
 public async Task<ActionResult<Solicitud>> PostSolicitud(Solicitud solicitud)
 {
-    // Buscamos el servicio solicitado
+    // Buscamos el servicio que requiere solicitud.
+    // No dependemos de un ID fijo porque la base puede generar
+    // un ID diferente cada vez que se inicializan los servicios.
     var servicio = await _context.ServiciosRecoleccion
-        .FirstOrDefaultAsync(s => s.Id == solicitud.ServicioRecoleccionId);
+        .FirstOrDefaultAsync(s => s.RequiereSolicitud);
 
     if (servicio == null)
     {
         return BadRequest(new
         {
-            mensaje = "El servicio de recolección no existe."
+            mensaje = "No existe un servicio habilitado para solicitudes."
         });
     }
+
+    // Asignamos automáticamente el servicio correcto.
+    solicitud.ServicioRecoleccionId = servicio.Id;
 
     // Guardamos la solicitud
     solicitud.FechaCreacion = DateTime.Now;

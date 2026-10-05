@@ -98,18 +98,36 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { 
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, 
-  IonButtons, IonMenuButton, IonCard, IonCardContent, 
-  IonItem, IonLabel, IonInput, IonTextarea, IonSelect, 
-  IonSelectOption, IonButton, IonIcon, IonList, IonBadge, 
-  IonNote, IonRefresher, IonRefresherContent, toastController,
-  alertController // <-- 1. Importado para manejar el 403
+
+import {
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonMenuButton,
+  IonCard,
+  IonCardContent,
+  IonItem,
+  IonLabel,
+  IonInput,
+  IonTextarea,
+  IonSelect,
+  IonSelectOption,
+  IonButton,
+  IonIcon,
+  IonList,
+  IonBadge,
+  IonNote,
+  IonRefresher,
+  IonRefresherContent,
+  toastController
 } from '@ionic/vue';
+
 import { sendOutline } from 'ionicons/icons';
-import axios from 'axios';
-import { authService } from '@/servicies/auth_service';
-import { obtener_api_url } from '@/config/debug';
+
+import { crear_solicitud_api } from '@/servicies/solicitudes_service';
 
 interface Solicitud {
   id: number;
@@ -122,7 +140,6 @@ interface Solicitud {
 const SOLICITUDES_KEY = 'ganica_solicitudes';
 
 const form = ref({
-  servicioId: 152,
   tipo: '',
   direccion: '',
   observaciones: ''
@@ -132,6 +149,7 @@ const solicitudes = ref<Solicitud[]>([]);
 
 const cargarSolicitudes = () => {
   const guardadas = localStorage.getItem(SOLICITUDES_KEY);
+
   if (guardadas) {
     solicitudes.value = JSON.parse(guardadas);
   }
@@ -139,6 +157,7 @@ const cargarSolicitudes = () => {
 
 const hacerRecarga = async (event: CustomEvent) => {
   cargarSolicitudes();
+
   setTimeout(() => {
     event.detail.complete();
   }, 500);
@@ -147,7 +166,6 @@ const hacerRecarga = async (event: CustomEvent) => {
 onMounted(() => {
   cargarSolicitudes();
 });
-
 
 const enviarSolicitud = async () => {
 
@@ -164,50 +182,28 @@ const enviarSolicitud = async () => {
   }
 
   try {
-    const token = authService.obtenerToken();
-
-    if (!token) {
-      const toast = await toastController.create({
-        message: 'Tu sesión expiró. Volvé a iniciar sesión.',
-        duration: 2500,
-        color: 'danger',
-        position: 'bottom'
-      });
-
-      await toast.present();
-      return;
-    }
 
     console.log('Enviando solicitud:', {
-      servicioRecoleccionId: form.value.servicioId,
+      servicioRecoleccionId: 152,
       direccion: form.value.direccion,
       observaciones: form.value.observaciones
     });
 
-    const response = await axios.post(
-      `${obtener_api_url()}/api/Solicitudes`,
-      {
-        servicioRecoleccionId: form.value.tipo,
-        direccion: form.value.direccion,
-        observaciones: form.value.observaciones
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const response = await crear_solicitud_api({
+      servicioRecoleccionId: 152,
+      direccion: form.value.direccion,
+      observaciones: form.value.observaciones
+    });
 
-    console.log('Solicitud creada:', response.data);
+    console.log('Solicitud creada:', response);
 
     const nuevaSolicitud: Solicitud = {
-  id: response.data.id,
-  tipo: form.value.tipo,
-  direccion: form.value.direccion,
-  observaciones: form.value.observaciones,
-  fecha: new Date().toLocaleDateString('es-AR')
-};
+      id: response.id,
+      tipo: form.value.tipo,
+      direccion: form.value.direccion,
+      observaciones: form.value.observaciones,
+      fecha: new Date().toLocaleDateString('es-AR')
+    };
 
     solicitudes.value.unshift(nuevaSolicitud);
 
@@ -216,12 +212,12 @@ const enviarSolicitud = async () => {
       JSON.stringify(solicitudes.value)
     );
 
-   form.value = {
-  servicioId: 152,
-  tipo: '',
-  direccion: '',
-  observaciones: ''
-};
+    form.value = {
+      tipo: '',
+      direccion: '',
+      observaciones: ''
+    };
+
     const toast = await toastController.create({
       message: '¡Solicitud registrada y enviada a los recolectores!',
       duration: 2500,
@@ -232,9 +228,8 @@ const enviarSolicitud = async () => {
     await toast.present();
 
   } catch (error: any) {
+
     console.error('Error al enviar solicitud:', error);
-    console.error('Status:', error?.response?.status);
-    console.error('Respuesta del servidor:', error?.response?.data);
 
     const toast = await toastController.create({
       message: 'No se pudo registrar la solicitud.',
