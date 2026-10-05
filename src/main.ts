@@ -4,6 +4,7 @@ import router from './router';
 
 import { IonicVue } from '@ionic/vue';
 import { createPinia } from 'pinia';
+import { iniciar_offline_service } from './servicies/offline_service';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/vue/css/core.css';
@@ -39,6 +40,7 @@ import './theme/variables.css';
 const app = createApp(App);
 
 const pinia = createPinia();
+iniciar_offline_service();
 
 app
   .use(IonicVue)

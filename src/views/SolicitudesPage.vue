@@ -89,7 +89,12 @@
             <p v-if="item.observaciones">💬 {{ item.observaciones }}</p>
             <ion-note color="medium">Fecha: {{ item.fecha }}</ion-note>
           </ion-label>
-          <ion-badge slot="end" color="warning">Pendiente</ion-badge>
+          <ion-badge
+  slot="end"
+  :color="item.estado === 'sin_enviar' ? 'warning' : 'success'"
+>
+  {{ item.estado === 'sin_enviar' ? 'Sin enviar' : 'Enviada' }}
+</ion-badge>
         </ion-item>
       </ion-list>
     </ion-content>
@@ -97,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted,onUnmounted} from 'vue';
 
 import {
   IonPage,
@@ -135,6 +140,7 @@ interface Solicitud {
   direccion: string;
   observaciones: string;
   fecha: string;
+  estado: 'enviada' | 'sin_enviar';
 }
 
 const SOLICITUDES_KEY = 'ganica_solicitudes';
@@ -155,6 +161,10 @@ const cargarSolicitudes = () => {
   }
 };
 
+const actualizarDesdeSincronizacion = () => {
+  cargarSolicitudes();
+};
+
 const hacerRecarga = async (event: CustomEvent) => {
   cargarSolicitudes();
 
@@ -164,7 +174,21 @@ const hacerRecarga = async (event: CustomEvent) => {
 };
 
 onMounted(() => {
+
   cargarSolicitudes();
+
+  window.addEventListener(
+    "solicitudes-sincronizadas",
+    actualizarDesdeSincronizacion
+  );
+});
+
+onUnmounted(() => {
+
+  window.removeEventListener(
+    "solicitudes-sincronizadas",
+    actualizarDesdeSincronizacion
+  );
 });
 
 const enviarSolicitud = async () => {
@@ -198,12 +222,13 @@ const enviarSolicitud = async () => {
     console.log('Solicitud creada:', response);
 
     const nuevaSolicitud: Solicitud = {
-      id: response.id,
-      tipo: form.value.tipo,
-      direccion: form.value.direccion,
-      observaciones: form.value.observaciones,
-      fecha: new Date().toLocaleDateString('es-AR')
-    };
+  id: response.id,
+  tipo: form.value.tipo,
+  direccion: form.value.direccion,
+  observaciones: form.value.observaciones,
+  fecha: new Date().toLocaleDateString('es-AR'),
+  estado: 'enviada'
+};
 
     solicitudes.value.unshift(nuevaSolicitud);
 
@@ -229,16 +254,57 @@ const enviarSolicitud = async () => {
 
   } catch (error: any) {
 
-    console.error('Error al enviar solicitud:', error);
+  console.error('Error al enviar solicitud:', error);
+
+  const mensajeError = error?.message || '';
+
+  if (
+    mensajeError.includes('Sin conexión') ||
+    mensajeError.includes('Tiempo de espera')
+  ) {
+
+    const solicitudPendiente: Solicitud = {
+      id: Date.now(),
+      tipo: form.value.tipo,
+      direccion: form.value.direccion,
+      observaciones: form.value.observaciones,
+      fecha: new Date().toLocaleDateString('es-AR'),
+      estado: 'sin_enviar'
+    };
+
+    solicitudes.value.unshift(solicitudPendiente);
+
+    localStorage.setItem(
+      SOLICITUDES_KEY,
+      JSON.stringify(solicitudes.value)
+    );
+
+    form.value = {
+      tipo: '',
+      direccion: '',
+      observaciones: ''
+    };
 
     const toast = await toastController.create({
-      message: 'No se pudo registrar la solicitud.',
-      duration: 2500,
-      color: 'danger',
+      message: 'Sin conexión. Solicitud guardada como "Sin enviar".',
+      duration: 3000,
+      color: 'warning',
       position: 'bottom'
     });
 
     await toast.present();
+
+    return;
   }
+
+  const toast = await toastController.create({
+    message: 'No se pudo registrar la solicitud.',
+    duration: 2500,
+    color: 'danger',
+    position: 'bottom'
+  });
+
+  await toast.present();
+}
 };
 </script>

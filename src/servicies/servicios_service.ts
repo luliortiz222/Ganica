@@ -4,7 +4,9 @@ import type { Servicio } from "@/stores/servicios_store";
 // GET: Obtener todos los servicios
 export async function obtener_servicios_api(): Promise<Servicio[]> {
   try {
-    return await ajax_request<Servicio[]>("servicios");
+    return await ajax_request<Servicio[]>("servicios", {
+      guardable: true
+    });
   } catch (error) {
     console.error("Error al obtener servicios:", error);
     throw error;

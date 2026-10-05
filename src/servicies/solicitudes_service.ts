@@ -20,6 +20,7 @@ export async function crear_solicitud_api(
 ): Promise<SolicitudApi> {
   return await ajax_request<SolicitudApi>("Solicitudes", {
     method: "POST",
-    body: JSON.stringify(datos)
+    body: JSON.stringify(datos),
+    encolable: true
   });
 }
