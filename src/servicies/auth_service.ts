@@ -5,7 +5,10 @@ export interface LoginRequest {
   email: string;
   password: string;
 }
-
+export interface RegistroRequest {
+  email: string;
+  password: string;
+}
 export interface AuthResponse {
   token: string;
   refresh_token: string;
@@ -51,6 +54,27 @@ export const authService = {
     
     return data;
   },
+  async registrar(datos: RegistroRequest) {
+  const url = `${obtener_api_url()}/sesion/registro`;
+
+  const respuesta = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(datos),
+  });
+
+  const data = await respuesta.json();
+
+  if (!respuesta.ok) {
+    throw new Error(
+      data?.mensaje || "No se pudo crear la cuenta"
+    );
+  }
+
+  return data;
+},
 
   logout() {
     localStorage.removeItem("token");
