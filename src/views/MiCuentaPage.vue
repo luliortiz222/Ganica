@@ -1,4 +1,3 @@
-```vue
 <template>
   <ion-page>
     <ion-header>
@@ -872,4 +871,3 @@ const guardarPerfil = async () => {
 };
 
 </script>
-```

@@ -24,12 +24,20 @@ public class SolicitudesController : ControllerBase
             .ToListAsync();
     }
 
+
 [HttpPost]
 public async Task<ActionResult<Solicitud>> PostSolicitud(Solicitud solicitud)
 {
-    // Buscamos el servicio que requiere solicitud.
-    // No dependemos de un ID fijo porque la base puede generar
-    // un ID diferente cada vez que se inicializan los servicios.
+    // Validamos el tipo de residuo recibido desde el formulario.
+    if (string.IsNullOrWhiteSpace(solicitud.TipoResiduo))
+    {
+        return BadRequest(new
+        {
+            mensaje = "Debés indicar el tipo de residuo."
+        });
+    }
+
+    // Buscamos el servicio habilitado para solicitudes.
     var servicio = await _context.ServiciosRecoleccion
         .FirstOrDefaultAsync(s => s.RequiereSolicitud);
 
@@ -41,17 +49,16 @@ public async Task<ActionResult<Solicitud>> PostSolicitud(Solicitud solicitud)
         });
     }
 
-    // Asignamos automáticamente el servicio correcto.
+    // Asociamos la solicitud al servicio habilitado.
     solicitud.ServicioRecoleccionId = servicio.Id;
 
-    // Guardamos la solicitud
     solicitud.FechaCreacion = DateTime.Now;
     solicitud.Estado = "Pendiente";
 
     _context.Solicitudes.Add(solicitud);
     await _context.SaveChangesAsync();
 
-    // Buscamos todos los usuarios que tengan rol recolector
+    // Buscamos todos los usuarios que tengan rol recolector.
     var recolectores = await _context.Usuarios
         .Include(u => u.Rol)
         .Where(u =>
@@ -60,7 +67,7 @@ public async Task<ActionResult<Solicitud>> PostSolicitud(Solicitud solicitud)
             u.Rol.Codigo == "recolector")
         .ToListAsync();
 
-    // Creamos una notificación para cada recolector
+    // Notificamos el tipo de residuo elegido en el formulario.
     foreach (var recolector in recolectores)
     {
         var notificacion = new Notificacion
@@ -68,7 +75,7 @@ public async Task<ActionResult<Solicitud>> PostSolicitud(Solicitud solicitud)
             UsuarioId = recolector.Id,
             Titulo = "Nueva solicitud de recolección",
             Mensaje =
-                $"Tenés una nueva tarea: {servicio.Nombre}. " +
+                $"Tenés una nueva tarea: {solicitud.TipoResiduo}. " +
                 $"Dirección: {solicitud.Direccion}. " +
                 $"Observaciones: {solicitud.Observaciones}",
             Tipo = TipoNotificacion.Entrega,
@@ -82,4 +89,5 @@ public async Task<ActionResult<Solicitud>> PostSolicitud(Solicitud solicitud)
 
     return Ok(solicitud);
 }
+
 }

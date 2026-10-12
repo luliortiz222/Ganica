@@ -1,7 +1,9 @@
+
 import { ajax_request } from "./ajax_service";
 
 export interface CrearSolicitud {
   servicioRecoleccionId: number;
+  tipoResiduo: string;
   direccion: string;
   observaciones: string;
 }
@@ -9,6 +11,7 @@ export interface CrearSolicitud {
 export interface SolicitudApi {
   id: number;
   servicioRecoleccionId: number;
+  tipoResiduo: string;
   direccion: string;
   observaciones: string;
   fechaCreacion: string;

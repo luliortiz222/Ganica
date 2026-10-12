@@ -1,23 +1,81 @@
-/* Verde orgánico */
+
+
+/* MODO CLARO */
+
 :root {
+
+  /* Color Principal */
+
   --ion-color-primary: #2e7d32;
   --ion-color-primary-rgb: 46, 125, 50;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
   --ion-color-primary-shade: #286e2c;
   --ion-color-primary-tint: #438a47;
+
+
+  /*Variables de diseño*/
+
+  /* Bordes */
+  --ganica-border: rgba(18, 18, 18, 0.16);
+
+  /* Texto secundario */
+  --ganica-muted: #565a66;
+
+  /* Radios */
+  --ganica-radio: 16px;
+  --ganica-radio-chico: 10px;
+
+  /* Sombra de tarjetas */
+  --ganica-sombra: 0 6px 18px rgba(0, 0, 0, 0.12);
+
+  /* Separación general entre elementos */
+  --ganica-espacio: 14px;
+
+  /* Espaciado pequeño */
+  --ganica-espacio-chico: 8px;
+
+  /* Espaciado grande */
+  --ganica-espacio-grande: 20px;
+
+
+  /*Fondos */
+
+  --ganica-fondo: #ffffff;
+
+  --ganica-fondo-secundario: #f5f5f5;
+
+
+  /*Tarjetas*/
+
+  --ganica-card: #ffffff;
+
+
+  /*Texto */
+
+  --ganica-texto: #222222;
+
+  --ganica-texto-secundario: #565a66;
 }
 
-/* Modo Oscuro - Rojo*/
+
+/*MODO OSCURO*/
+
 html.dark,
 body.dark,
 .ion-palette-dark {
+
+  /*Color Principal */
+
   --ion-color-primary: #c06161;
   --ion-color-primary-rgb: 192, 97, 97;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
   --ion-color-primary-shade: #cf3d3d;
   --ion-color-primary-tint: #bb4848;
+
+
+  /*Fonods ionic*/
 
   --ion-background-color: #121212;
   --ion-background-color-rgb: 18, 18, 18;
@@ -27,9 +85,28 @@ body.dark,
 
   --ion-card-background: #1e1e1e;
   --ion-item-background: #1e1e1e;
+
+
+  /*Variables de diseño*/
+
+  --ganica-border: rgba(255, 255, 255, 0.16);
+
+  --ganica-muted: #b3b3b3;
+
+  --ganica-fondo: #121212;
+
+  --ganica-fondo-secundario: #1e1e1e;
+
+  --ganica-card: #1e1e1e;
+
+  --ganica-texto: #ffffff;
+
+  --ganica-texto-secundario: #b3b3b3;
 }
 
-/* Títulos y textos en tarjetas */
+
+/*Texto de tarjeta */
+
 html.dark ion-card-title,
 body.dark ion-card-title {
   color: #ffffff;
@@ -45,8 +122,10 @@ body.dark ion-card-content {
   color: #e0e0e0;
 }
 
+
+/*Titulo de gánica */
+
 .app-titulo-ganica {
   color: var(--ion-color-primary);
   font-weight: bold;
 }
-

@@ -9,5 +9,7 @@ public class Solicitud
     public DateTime FechaCreacion { get; set; } = DateTime.Now;
     public string Estado { get; set; } = "Pendiente";
 
+    public string TipoResiduo { get; set; } = string.Empty;
+
     public ServicioRecoleccion? ServicioRecoleccion { get; set; }
 }

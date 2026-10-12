@@ -96,6 +96,8 @@ namespace GanicaApi.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UsuarioId");
+
                     b.ToTable("Notificaciones");
                 });
 
@@ -260,6 +262,10 @@ namespace GanicaApi.Migrations
                     b.Property<int>("ServicioRecoleccionId")
                         .HasColumnType("int");
 
+                    b.Property<string>("TipoResiduo")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ServicioRecoleccionId");
@@ -304,6 +310,17 @@ namespace GanicaApi.Migrations
                             PasswordHash = "$2a$11$qX7vHwK7hJgY5U7jJg8i2e1u5O0e4J8s7G3f2E1d0C9b8A7m6L5k4",
                             RolId = 1L
                         });
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.Notificacion", b =>
+                {
+                    b.HasOne("GanicaApi.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("GanicaApi.Models.RefreshToken", b =>
