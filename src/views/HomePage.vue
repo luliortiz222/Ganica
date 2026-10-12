@@ -159,26 +159,55 @@ const reintentar = () => {
 const verificarPermisoAdministrador = async (): Promise<boolean> => {
   const usuarioGuardado = localStorage.getItem('usuario');
 
-  if (!usuarioGuardado) return false;
+  if (!usuarioGuardado) {
+    const alerta = await alertController.create({
+      header: 'Sesión no identificada',
+      message: 'Iniciá sesión para continuar.',
+      buttons: [
+        {
+          text: 'Entendido',
+          role: 'cancel'
+        }
+      ],
+      cssClass: 'alerta-ganica'
+    });
+
+    await alerta.present();
+    return false;
+  }
 
   try {
     const parsed = JSON.parse(usuarioGuardado);
 
     if (parsed.rol !== 'administrador') {
       const alerta = await alertController.create({
-        header: 'Acceso Denegado (403)',
+        header: '🛡️ Acceso restringido',
         message:
-          'Las modificaciones en el sistema solo las puede realizar el administrador.',
-        buttons: ['Aceptar']
+          'No tenés permisos para administrar los servicios de recolección. Esta acción está reservada para el administrador.',
+        buttons: [
+          {
+            text: 'Entendido',
+            role: 'cancel',
+            cssClass: 'boton-alerta-ganica'
+          }
+        ],
+        cssClass: 'alerta-ganica'
       });
 
       await alerta.present();
-
       return false;
     }
 
     return true;
-  } catch (e) {
+  } catch {
+    const alerta = await alertController.create({
+      header: 'No se pudo verificar tu acceso',
+      message: 'Volvé a iniciar sesión e intentá nuevamente.',
+      buttons: ['Aceptar'],
+      cssClass: 'alerta-ganica'
+    });
+
+    await alerta.present();
     return false;
   }
 };
@@ -763,6 +792,36 @@ const alternarTema = () => {
 .icono-vacio {
   font-size: 56px;
   color: var(--ion-color-medium);
+}
+
+
+/* Alertas de permisos de GANICA */
+:global(.alerta-ganica .alert-wrapper) {
+  border-radius: 20px;
+  --background: var(--ion-background-color, #ffffff);
+}
+
+:global(.alerta-ganica .alert-head) {
+  padding-bottom: 12px;
+}
+
+:global(.alerta-ganica .alert-title) {
+  font-weight: 700;
+  color: var(--ion-color-primary);
+}
+
+:global(.alerta-ganica .alert-message) {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  white-space: normal;
+  line-height: 1.6;
+  color: var(--ion-text-color, #222222);
+}
+
+:global(.alerta-ganica .alert-button) {
+  font-weight: 700;
+  text-transform: none;
 }
 
 </style>

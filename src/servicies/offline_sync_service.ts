@@ -112,7 +112,7 @@ export async function sincronizar_cola(): Promise<void> {
 
       // Dejamos la operación en la cola para
       // volver a intentarla posteriormente.
-      break;
+      continue;
     }
   }
 }
