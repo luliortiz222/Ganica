@@ -93,9 +93,11 @@
                 <ion-icon :icon="checkmarkCircleOutline" />
                 Ubicación seleccionada
               </p>
+
               <p class="coordenadas-seleccionadas">
                 Latitud: {{ form.latitud.toFixed(6) }}
               </p>
+
               <p class="coordenadas-seleccionadas">
                 Longitud: {{ form.longitud.toFixed(6) }}
               </p>
@@ -111,6 +113,27 @@
                 :rows="3"
               />
             </ion-item>
+
+            <!-- Dictar observaciones por voz -->
+            <ion-button
+              expand="block"
+              fill="outline"
+              type="button"
+              class="app-boton ion-margin-top"
+              :disabled="escuchandoVoz"
+              @click="dictarObservaciones"
+            >
+              <ion-icon
+                :icon="micOutline"
+                slot="start"
+              />
+
+              {{
+                escuchandoVoz
+                  ? 'Escuchando...'
+                  : 'Dictar observaciones'
+              }}
+            </ion-button>
 
             <!-- Enviar solicitud -->
             <ion-button
@@ -180,6 +203,7 @@
             <ion-icon
               :icon="obtenerEstado(item.estado).icono"
             />
+
             {{ obtenerEstado(item.estado).texto }}
           </ion-badge>
         </ion-item>
@@ -230,7 +254,8 @@ import {
 import {
   sendOutline,
   checkmarkCircleOutline,
-  locationOutline
+  locationOutline,
+  micOutline
 } from 'ionicons/icons';
 
 import SelectorUbicacion from '@/components/SelectorUbicacion.vue';
@@ -238,6 +263,10 @@ import SelectorUbicacion from '@/components/SelectorUbicacion.vue';
 import {
   crear_solicitud_api
 } from '@/servicies/solicitudes_service';
+
+import {
+  dictar_texto
+} from '@/servicies/voz_service';
 
 import {
   ESTADOS_SOLICITUD
@@ -273,6 +302,9 @@ const form = ref({
 const solicitudes = ref<Solicitud[]>([]);
 const modalUbicacionAbierto = ref(false);
 
+// Estado del reconocimiento de voz.
+const escuchandoVoz = ref(false);
+
 const ESTADO_POR_DEFECTO = {
   color: 'medium',
   texto: 'En revisión',
@@ -299,6 +331,47 @@ const aplicarUbicacion = (ubicacion: Ubicacion) => {
 const limpiarCoordenadas = () => {
   form.value.latitud = null;
   form.value.longitud = null;
+};
+
+// Dictar y agregar texto a las observaciones.
+const dictarObservaciones = async () => {
+  if (escuchandoVoz.value) {
+    return;
+  }
+
+  escuchandoVoz.value = true;
+
+  try {
+    const textoReconocido = await dictar_texto();
+
+    if (textoReconocido.trim()) {
+      const textoActual = form.value.observaciones.trim();
+      const textoNuevo = textoReconocido.trim();
+
+      form.value.observaciones = textoActual
+        ? `${textoActual} ${textoNuevo}`
+        : textoNuevo;
+
+      await mostrarToast(
+        'Texto agregado a las observaciones.',
+        'success'
+      );
+    }
+  } catch (error: unknown) {
+    console.error(
+      'Error en el reconocimiento de voz:',
+      error
+    );
+
+    const mensaje =
+      error instanceof Error
+        ? error.message
+        : 'No se pudo utilizar el reconocimiento de voz.';
+
+    await mostrarToast(mensaje, 'warning');
+  } finally {
+    escuchandoVoz.value = false;
+  }
 };
 
 // Cargar solicitudes guardadas localmente.
@@ -381,7 +454,10 @@ const mostrarToast = async (
 
 // Enviar solicitud.
 const enviarSolicitud = async () => {
-  if (!form.value.tipo || !form.value.direccion.trim()) {
+  if (
+    !form.value.tipo ||
+    !form.value.direccion.trim()
+  ) {
     await mostrarToast(
       'Completá el tipo de residuo y la dirección.',
       'warning'
@@ -410,11 +486,19 @@ const enviarSolicitud = async () => {
       longitud: datosLocales.longitud
     };
 
-    console.log('Enviando solicitud:', datosSolicitud);
+    console.log(
+      'Enviando solicitud:',
+      datosSolicitud
+    );
 
-    const response = await crear_solicitud_api(datosSolicitud);
+    const response = await crear_solicitud_api(
+      datosSolicitud
+    );
 
-    console.log('Solicitud creada:', response);
+    console.log(
+      'Solicitud creada:',
+      response
+    );
 
     const nuevaSolicitud: Solicitud = {
       id: response.id,
@@ -437,10 +521,15 @@ const enviarSolicitud = async () => {
       'success'
     );
   } catch (error: unknown) {
-    console.error('Error al enviar solicitud:', error);
+    console.error(
+      'Error al enviar solicitud:',
+      error
+    );
 
     const mensajeError =
-      error instanceof Error ? error.message : '';
+      error instanceof Error
+        ? error.message
+        : '';
 
     if (
       mensajeError.includes('Sin conexión') ||
