@@ -1,3 +1,4 @@
+
 import { offline_queue } from "@/stores/offline_queue";
 import { obtener_api_url } from "@/config/debug";
 
@@ -12,7 +13,6 @@ function construir_url(endpoint: string): string {
 }
 
 export async function sincronizar_cola(): Promise<void> {
-
   const cola = offline_queue.obtener_cola();
 
   if (cola.length === 0) {
@@ -27,14 +27,16 @@ export async function sincronizar_cola(): Promise<void> {
   const token = localStorage.getItem("token");
 
   for (const operacion of cola) {
-
     try {
-
       const url = construir_url(operacion.endpoint);
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json"
-      };
+      const esFormData = operacion.options.body instanceof FormData;
+
+      const headers: Record<string, string> = {};
+
+      if (!esFormData) {
+        headers["Content-Type"] = "application/json";
+      }
 
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -54,7 +56,7 @@ export async function sincronizar_cola(): Promise<void> {
         );
       }
 
-      await response.json();
+      const respuesta = await response.json();
 
       offline_queue.eliminar_operacion(operacion.id);
 
@@ -62,39 +64,64 @@ export async function sincronizar_cola(): Promise<void> {
         `Operación sincronizada correctamente: ${operacion.endpoint}`
       );
 
-      // Si era una solicitud, la marcamos como enviada
-      // en el historial local.
       if (operacion.endpoint === "Solicitudes") {
-
         const claveSolicitudes = "ganica_solicitudes";
         const datosSolicitudes = localStorage.getItem(claveSolicitudes);
 
         if (datosSolicitudes) {
-
           try {
-
             const solicitudes = JSON.parse(datosSolicitudes);
 
+            // Intentamos relacionar la operación enviada con
+            // la solicitud local mediante sus datos originales.
+            let datosEnviados: any = {};
+
+            try {
+              if (typeof operacion.options.body === "string") {
+                datosEnviados = JSON.parse(operacion.options.body);
+              }
+            } catch {
+              datosEnviados = {};
+            }
+
+            let actualizada = false;
+
             const solicitudesActualizadas = solicitudes.map(
-              (solicitud: any) => ({
-                ...solicitud,
-                estado:
-                  solicitud.estado === "sin_enviar"
-                    ? "enviada"
-                    : solicitud.estado
-              })
+              (solicitud: any) => {
+                const coincide =
+                  !actualizada &&
+                  solicitud.estado === "sin_enviar" &&
+                  solicitud.tipo === datosEnviados.tipoResiduo &&
+                  solicitud.direccion === datosEnviados.direccion &&
+                  solicitud.observaciones === datosEnviados.observaciones &&
+                  (solicitud.latitud ?? null) ===
+                    (datosEnviados.latitud ?? null) &&
+                  (solicitud.longitud ?? null) ===
+                    (datosEnviados.longitud ?? null);
+
+                if (coincide) {
+                  actualizada = true;
+
+                  return {
+                    ...solicitud,
+                    estado: "enviada",
+                    id: respuesta?.id ?? solicitud.id
+                  };
+                }
+
+                return solicitud;
+              }
             );
 
             localStorage.setItem(
               claveSolicitudes,
               JSON.stringify(solicitudesActualizadas)
             );
+
             window.dispatchEvent(
-  new CustomEvent("solicitudes-sincronizadas")
-);
-
+              new CustomEvent("solicitudes-sincronizadas")
+            );
           } catch (error) {
-
             console.error(
               "No se pudieron actualizar las solicitudes locales:",
               error
@@ -102,16 +129,14 @@ export async function sincronizar_cola(): Promise<void> {
           }
         }
       }
-
     } catch (error) {
-
       console.error(
         `No se pudo sincronizar: ${operacion.endpoint}`,
         error
       );
 
-      // Dejamos la operación en la cola para
-      // volver a intentarla posteriormente.
+      // Si falla, la operación permanece en la cola
+      // para volver a intentarlo posteriormente.
       continue;
     }
   }

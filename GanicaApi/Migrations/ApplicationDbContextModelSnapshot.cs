@@ -255,6 +255,12 @@ namespace GanicaApi.Migrations
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<double?>("Latitud")
+                        .HasColumnType("double");
+
+                    b.Property<double?>("Longitud")
+                        .HasColumnType("double");
+
                     b.Property<string>("Observaciones")
                         .IsRequired()
                         .HasColumnType("longtext");

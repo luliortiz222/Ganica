@@ -1,4 +1,5 @@
 
+
 import { ajax_request } from "./ajax_service";
 
 export interface CrearSolicitud {
@@ -6,6 +7,8 @@ export interface CrearSolicitud {
   tipoResiduo: string;
   direccion: string;
   observaciones: string;
+  latitud?: number | null;
+  longitud?: number | null;
 }
 
 export interface SolicitudApi {
@@ -16,6 +19,8 @@ export interface SolicitudApi {
   observaciones: string;
   fechaCreacion: string;
   estado: string;
+  latitud?: number | null;
+  longitud?: number | null;
 }
 
 export async function crear_solicitud_api(
@@ -27,3 +32,4 @@ export async function crear_solicitud_api(
     encolable: true
   });
 }
+

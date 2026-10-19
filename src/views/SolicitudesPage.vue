@@ -1,4 +1,3 @@
-
 <template>
   <ion-page>
     <!-- Encabezado -->
@@ -35,6 +34,7 @@
             class="app-formulario"
             @submit.prevent="enviarSolicitud"
           >
+            <!-- Tipo de residuo -->
             <ion-item lines="full">
               <ion-select
                 v-model="form.tipo"
@@ -57,6 +57,7 @@
               </ion-select>
             </ion-item>
 
+            <!-- Dirección de retiro -->
             <ion-item lines="full">
               <ion-input
                 v-model="form.direccion"
@@ -64,9 +65,43 @@
                 label-placement="stacked"
                 placeholder="Ej: Av. Mitre 1234"
                 required
+                @ionInput="limpiarCoordenadas"
               />
             </ion-item>
 
+            <!-- Abrir mapa -->
+            <ion-button
+              expand="block"
+              fill="outline"
+              class="app-boton ion-margin-top"
+              type="button"
+              @click="modalUbicacionAbierto = true"
+            >
+              <ion-icon
+                :icon="locationOutline"
+                slot="start"
+              />
+              Seleccionar ubicación en el mapa
+            </ion-button>
+
+            <!-- Mostrar coordenadas elegidas -->
+            <ion-note
+              v-if="form.latitud !== null && form.longitud !== null"
+              color="success"
+            >
+              <p class="coordenadas-seleccionadas">
+                <ion-icon :icon="checkmarkCircleOutline" />
+                Ubicación seleccionada
+              </p>
+              <p class="coordenadas-seleccionadas">
+                Latitud: {{ form.latitud.toFixed(6) }}
+              </p>
+              <p class="coordenadas-seleccionadas">
+                Longitud: {{ form.longitud.toFixed(6) }}
+              </p>
+            </ion-note>
+
+            <!-- Observaciones -->
             <ion-item lines="full">
               <ion-textarea
                 v-model="form.observaciones"
@@ -77,11 +112,12 @@
               />
             </ion-item>
 
+            <!-- Enviar solicitud -->
             <ion-button
               expand="block"
               type="submit"
               color="primary"
-              class="app-boton"
+              class="app-boton ion-margin-top"
             >
               <ion-icon
                 :icon="sendOutline"
@@ -123,6 +159,13 @@
               💬 {{ item.observaciones }}
             </p>
 
+            <p
+              v-if="item.latitud != null && item.longitud != null"
+            >
+              Coordenadas: {{ item.latitud.toFixed(6) }},
+              {{ item.longitud.toFixed(6) }}
+            </p>
+
             <ion-note color="medium">
               Fecha: {{ item.fecha }}
             </ion-note>
@@ -130,18 +173,28 @@
 
           <!-- Estado de envío -->
           <ion-badge
-  slot="end"
-  :color="obtenerEstado(item.estado).color"
-  class="app-estado-badge"
->
-  <ion-icon
-    :icon="obtenerEstado(item.estado).icono"
-  />
-  {{ obtenerEstado(item.estado).texto }}
-</ion-badge>
+            slot="end"
+            :color="obtenerEstado(item.estado).color"
+            class="app-estado-badge"
+          >
+            <ion-icon
+              :icon="obtenerEstado(item.estado).icono"
+            />
+            {{ obtenerEstado(item.estado).texto }}
+          </ion-badge>
         </ion-item>
       </ion-list>
     </ion-content>
+
+    <!-- Selector de ubicación -->
+    <SelectorUbicacion
+      :abierto="modalUbicacionAbierto"
+      :direccion-inicial="form.direccion"
+      :latitud-inicial="form.latitud"
+      :longitud-inicial="form.longitud"
+      @confirmar="aplicarUbicacion"
+      @cerrar="modalUbicacionAbierto = false"
+    />
   </ion-page>
 </template>
 
@@ -174,7 +227,13 @@ import {
   toastController
 } from '@ionic/vue';
 
-import { sendOutline, checkmarkCircleOutline  } from 'ionicons/icons';
+import {
+  sendOutline,
+  checkmarkCircleOutline,
+  locationOutline
+} from 'ionicons/icons';
+
+import SelectorUbicacion from '@/components/SelectorUbicacion.vue';
 
 import {
   crear_solicitud_api
@@ -191,6 +250,14 @@ interface Solicitud {
   observaciones: string;
   fecha: string;
   estado: 'enviada' | 'sin_enviar';
+  latitud?: number | null;
+  longitud?: number | null;
+}
+
+interface Ubicacion {
+  direccion: string;
+  latitud: number;
+  longitud: number;
 }
 
 const SOLICITUDES_KEY = 'ganica_solicitudes';
@@ -198,10 +265,13 @@ const SOLICITUDES_KEY = 'ganica_solicitudes';
 const form = ref({
   tipo: '',
   direccion: '',
-  observaciones: ''
+  observaciones: '',
+  latitud: null as number | null,
+  longitud: null as number | null
 });
 
 const solicitudes = ref<Solicitud[]>([]);
+const modalUbicacionAbierto = ref(false);
 
 const ESTADO_POR_DEFECTO = {
   color: 'medium',
@@ -217,7 +287,21 @@ const obtenerEstado = (estado: string) => {
   );
 };
 
-// Cargar solicitudes guardadas localmente
+// Aplicar la ubicación confirmada en el mapa.
+const aplicarUbicacion = (ubicacion: Ubicacion) => {
+  form.value.direccion = ubicacion.direccion;
+  form.value.latitud = ubicacion.latitud;
+  form.value.longitud = ubicacion.longitud;
+};
+
+// Si el usuario edita manualmente la dirección,
+// se eliminan las coordenadas para evitar datos incorrectos.
+const limpiarCoordenadas = () => {
+  form.value.latitud = null;
+  form.value.longitud = null;
+};
+
+// Cargar solicitudes guardadas localmente.
 const cargarSolicitudes = () => {
   const guardadas = localStorage.getItem(SOLICITUDES_KEY);
 
@@ -237,12 +321,12 @@ const cargarSolicitudes = () => {
   }
 };
 
-// Actualizar historial después de la sincronización
+// Actualizar historial después de la sincronización.
 const actualizarDesdeSincronizacion = () => {
   cargarSolicitudes();
 };
 
-// Recargar historial mediante el gesto de Ionic
+// Recargar historial mediante el gesto de Ionic.
 const hacerRecarga = async (event: CustomEvent) => {
   cargarSolicitudes();
 
@@ -251,7 +335,7 @@ const hacerRecarga = async (event: CustomEvent) => {
   }, 500);
 };
 
-// Registrar eventos de sincronización
+// Registrar eventos de sincronización.
 onMounted(() => {
   cargarSolicitudes();
 
@@ -261,7 +345,7 @@ onMounted(() => {
   );
 });
 
-// Eliminar evento al salir de la vista
+// Eliminar evento al salir de la vista.
 onUnmounted(() => {
   window.removeEventListener(
     'solicitudes-sincronizadas',
@@ -269,16 +353,18 @@ onUnmounted(() => {
   );
 });
 
-// Limpiar formulario
+// Limpiar formulario.
 const limpiarFormulario = () => {
   form.value = {
     tipo: '',
     direccion: '',
-    observaciones: ''
+    observaciones: '',
+    latitud: null,
+    longitud: null
   };
 };
 
-// Mostrar notificación
+// Mostrar notificación.
 const mostrarToast = async (
   mensaje: string,
   color: 'success' | 'warning' | 'danger'
@@ -293,7 +379,7 @@ const mostrarToast = async (
   await toast.present();
 };
 
-// Enviar solicitud
+// Enviar solicitud.
 const enviarSolicitud = async () => {
   if (!form.value.tipo || !form.value.direccion.trim()) {
     await mostrarToast(
@@ -304,12 +390,24 @@ const enviarSolicitud = async () => {
     return;
   }
 
+  // Copiamos los datos antes de enviar para mantener
+  // la misma información en caso de un error de conexión.
+  const datosLocales = {
+    tipo: form.value.tipo,
+    direccion: form.value.direccion.trim(),
+    observaciones: form.value.observaciones,
+    latitud: form.value.latitud,
+    longitud: form.value.longitud
+  };
+
   try {
     const datosSolicitud = {
       servicioRecoleccionId: 152,
-      tipoResiduo: form.value.tipo,
-      direccion: form.value.direccion.trim(),
-      observaciones: form.value.observaciones
+      tipoResiduo: datosLocales.tipo,
+      direccion: datosLocales.direccion,
+      observaciones: datosLocales.observaciones,
+      latitud: datosLocales.latitud,
+      longitud: datosLocales.longitud
     };
 
     console.log('Enviando solicitud:', datosSolicitud);
@@ -320,9 +418,7 @@ const enviarSolicitud = async () => {
 
     const nuevaSolicitud: Solicitud = {
       id: response.id,
-      tipo: form.value.tipo,
-      direccion: form.value.direccion,
-      observaciones: form.value.observaciones,
+      ...datosLocales,
       fecha: new Date().toLocaleDateString('es-AR'),
       estado: 'enviada'
     };
@@ -352,9 +448,7 @@ const enviarSolicitud = async () => {
     ) {
       const solicitudPendiente: Solicitud = {
         id: Date.now(),
-        tipo: form.value.tipo,
-        direccion: form.value.direccion,
-        observaciones: form.value.observaciones,
+        ...datosLocales,
         fecha: new Date().toLocaleDateString('es-AR'),
         estado: 'sin_enviar'
       };
@@ -385,8 +479,6 @@ const enviarSolicitud = async () => {
 </script>
 
 <style scoped>
-/* Ajustes específicos de esta vista */
-
 ion-card-content {
   padding: 16px;
 }
@@ -409,5 +501,13 @@ ion-badge {
 
 .app-estado-badge ion-icon {
   font-size: 15px;
+}
+
+.coordenadas-seleccionadas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  font-size: 13px;
 }
 </style>
