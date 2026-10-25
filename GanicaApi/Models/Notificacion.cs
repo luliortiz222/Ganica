@@ -13,6 +13,10 @@ namespace GanicaApi.Models
         public DateTimeOffset CreadoEn { get; set; } = DateTimeOffset.UtcNow;
 
         public Usuario? Usuario { get; set; }
+
+        public int? SolicitudId { get; set; }
+
+        public Solicitud? Solicitud { get; set; }
     }
 
     public enum TipoNotificacion

@@ -66,6 +66,112 @@ namespace GanicaApi.Migrations
                     b.ToTable("Entregas");
                 });
 
+            modelBuilder.Entity("GanicaApi.Models.HistorialEntrega", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("EntregaId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EstadoAnterior")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("EstadoNuevo")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTimeOffset>("Fecha")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Observacion")
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntregaId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("HistorialEntregas");
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.HistorialNotificacion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Accion")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTimeOffset>("Fecha")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<long>("NotificacionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NotificacionId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("HistorialNotificaciones");
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.HistorialSolicitud", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Accion")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("EstadoAnterior")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("EstadoNuevo")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTimeOffset>("Fecha")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Observacion")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("SolicitudId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SolicitudId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("HistorialSolicitudes");
+                });
+
             modelBuilder.Entity("GanicaApi.Models.Notificacion", b =>
                 {
                     b.Property<long>("Id")
@@ -84,6 +190,9 @@ namespace GanicaApi.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<int?>("SolicitudId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Tipo")
                         .HasColumnType("int");
 
@@ -95,6 +204,8 @@ namespace GanicaApi.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SolicitudId");
 
                     b.HasIndex("UsuarioId");
 
@@ -318,13 +429,77 @@ namespace GanicaApi.Migrations
                         });
                 });
 
+            modelBuilder.Entity("GanicaApi.Models.HistorialEntrega", b =>
+                {
+                    b.HasOne("GanicaApi.Models.Entrega", "Entrega")
+                        .WithMany()
+                        .HasForeignKey("EntregaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GanicaApi.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Entrega");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.HistorialNotificacion", b =>
+                {
+                    b.HasOne("GanicaApi.Models.Notificacion", "Notificacion")
+                        .WithMany()
+                        .HasForeignKey("NotificacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GanicaApi.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Notificacion");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.HistorialSolicitud", b =>
+                {
+                    b.HasOne("GanicaApi.Models.Solicitud", "Solicitud")
+                        .WithMany()
+                        .HasForeignKey("SolicitudId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GanicaApi.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Solicitud");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("GanicaApi.Models.Notificacion", b =>
                 {
+                    b.HasOne("GanicaApi.Models.Solicitud", "Solicitud")
+                        .WithMany()
+                        .HasForeignKey("SolicitudId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GanicaApi.Models.Usuario", "Usuario")
                         .WithMany()
                         .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Solicitud");
 
                     b.Navigation("Usuario");
                 });

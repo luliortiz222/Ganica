@@ -1,6 +1,5 @@
 <template>
   <ion-page>
-    <!-- Encabezado -->
     <ion-header>
       <ion-toolbar color="primary">
         <ion-buttons slot="start">
@@ -11,7 +10,6 @@
     </ion-header>
 
     <ion-content class="ion-padding">
-      <!-- Actualizar historial -->
       <ion-refresher
         slot="fixed"
         @ionRefresh="hacerRecarga($event)"
@@ -23,195 +21,286 @@
         />
       </ion-refresher>
 
-      <!-- Formulario de solicitud -->
-      <h2 class="app-seccion-titulo">
-        Nueva Solicitud
-      </h2>
+      <!-- FORMULARIO: SOLO ADMINISTRADOR -->
+      <template v-if="esAdministrador">
+        <h2 class="app-seccion-titulo">
+          Nueva Solicitud
+        </h2>
 
-      <ion-card class="app-card">
-        <ion-card-content>
-          <form
-            class="app-formulario"
-            @submit.prevent="enviarSolicitud"
-          >
-            <!-- Tipo de residuo -->
-            <ion-item lines="full">
-              <ion-select
-                v-model="form.tipo"
-                label="Tipo de Residuo Especial"
-                label-placement="stacked"
-                placeholder="Seleccione una opción"
-                required
+        <ion-card class="app-card">
+          <ion-card-content>
+            <form
+              class="app-formulario"
+              @submit.prevent="enviarSolicitud"
+            >
+              <ion-item lines="full">
+                <ion-select
+                  v-model="form.tipo"
+                  label="Tipo de Residuo Especial"
+                  label-placement="stacked"
+                  placeholder="Seleccione una opción"
+                  required
+                >
+                  <ion-select-option value="Poda y Escombros">
+                    Poda y Escombros
+                  </ion-select-option>
+
+                  <ion-select-option value="Electrodomésticos / Voluminosos">
+                    Electrodomésticos / Voluminosos
+                  </ion-select-option>
+
+                  <ion-select-option value="Aceite Vegetal Usado">
+                    Aceite Vegetal Usado
+                  </ion-select-option>
+                </ion-select>
+              </ion-item>
+
+              <ion-item lines="full">
+                <ion-input
+                  v-model="form.direccion"
+                  label="Dirección de Retiro"
+                  label-placement="stacked"
+                  placeholder="Ej: Av. Mitre 1234"
+                  required
+                  @ionInput="limpiarCoordenadas"
+                />
+              </ion-item>
+
+              <ion-button
+                expand="block"
+                fill="outline"
+                class="app-boton ion-margin-top"
+                type="button"
+                @click="modalUbicacionAbierto = true"
               >
-                <ion-select-option value="Poda y Escombros">
-                  Poda y Escombros
+                <ion-icon
+                  :icon="locationOutline"
+                  slot="start"
+                />
+                Seleccionar ubicación en el mapa
+              </ion-button>
+
+              <ion-note
+                v-if="form.latitud !== null && form.longitud !== null"
+                color="success"
+              >
+                <p class="coordenadas-seleccionadas">
+                  <ion-icon :icon="checkmarkCircleOutline" />
+                  Ubicación seleccionada
+                </p>
+
+                <p class="coordenadas-seleccionadas">
+                  Latitud: {{ form.latitud.toFixed(6) }}
+                </p>
+
+                <p class="coordenadas-seleccionadas">
+                  Longitud: {{ form.longitud.toFixed(6) }}
+                </p>
+              </ion-note>
+
+              <ion-item lines="full">
+                <ion-textarea
+                  v-model="form.observaciones"
+                  label="Observaciones / Detalles"
+                  label-placement="stacked"
+                  placeholder="Ej: 2 bolsas grandes de ramas frente al garage"
+                  :rows="3"
+                />
+              </ion-item>
+
+              <ion-button
+                expand="block"
+                fill="outline"
+                type="button"
+                class="app-boton ion-margin-top"
+                :disabled="escuchandoVoz"
+                @click="dictarObservaciones"
+              >
+                <ion-icon
+                  :icon="micOutline"
+                  slot="start"
+                />
+
+                {{
+                  escuchandoVoz
+                    ? 'Escuchando...'
+                    : 'Dictar observaciones'
+                }}
+              </ion-button>
+
+              <ion-button
+                expand="block"
+                type="submit"
+                color="primary"
+                class="app-boton ion-margin-top"
+              >
+                <ion-icon
+                  :icon="sendOutline"
+                  slot="start"
+                />
+                Enviar Solicitud
+              </ion-button>
+            </form>
+          </ion-card-content>
+        </ion-card>
+
+        <!-- HISTORIAL LOCAL DEL ADMINISTRADOR -->
+        <h3 class="app-seccion-titulo">
+          Mis Solicitudes
+        </h3>
+
+        <div v-if="solicitudes.length === 0">
+          <ion-note class="app-mensaje-vacio">
+            No tenés solicitudes registradas aún.
+          </ion-note>
+        </div>
+
+        <ion-list
+          v-else
+          lines="full"
+        >
+          <ion-item
+            v-for="item in solicitudes"
+            :key="item.id"
+            class="app-lista-item"
+          >
+            <ion-label>
+              <h2>
+                <strong>{{ item.tipo }}</strong>
+              </h2>
+
+              <p>📍 {{ item.direccion }}</p>
+
+              <p v-if="item.observaciones">
+                💬 {{ item.observaciones }}
+              </p>
+
+              <p
+                v-if="item.latitud != null && item.longitud != null"
+              >
+                Coordenadas: {{ item.latitud.toFixed(6) }},
+                {{ item.longitud.toFixed(6) }}
+              </p>
+
+              <ion-note color="medium">
+                Fecha: {{ item.fecha }}
+              </ion-note>
+            </ion-label>
+
+            <ion-badge
+              slot="end"
+              :color="obtenerEstado(item.estado).color"
+              class="app-estado-badge"
+            >
+              <ion-icon
+                :icon="obtenerEstado(item.estado).icono"
+              />
+
+              {{ obtenerEstado(item.estado).texto }}
+            </ion-badge>
+          </ion-item>
+        </ion-list>
+      </template>
+
+      <!-- SOLICITUDES RECIBIDAS: SOLO RECOLECTOR -->
+      <template v-else-if="esRecolector">
+        <h2 class="app-seccion-titulo">
+          Solicitudes recibidas
+        </h2>
+
+        <ion-note
+          v-if="cargandoSolicitudes"
+          color="medium"
+        >
+          Cargando solicitudes...
+        </ion-note>
+
+        <ion-note
+          v-else-if="solicitudesRecolector.length === 0"
+          class="app-mensaje-vacio"
+        >
+          No tenés solicitudes recibidas.
+        </ion-note>
+
+        <ion-list
+          v-else
+          lines="full"
+        >
+          <ion-item
+            v-for="item in solicitudesRecolector"
+            :key="item.id"
+            class="app-lista-item"
+          >
+            <ion-label class="ion-text-wrap">
+              <h2>
+                <strong>{{ item.tipoResiduo }}</strong>
+              </h2>
+
+              <p>📍 {{ item.direccion }}</p>
+
+              <p v-if="item.observaciones">
+                💬 {{ item.observaciones }}
+              </p>
+
+              <p
+                v-if="item.latitud != null && item.longitud != null"
+              >
+                Coordenadas: {{ item.latitud.toFixed(6) }},
+                {{ item.longitud.toFixed(6) }}
+              </p>
+
+              <p>
+                Fecha:
+                {{ new Date(item.fechaCreacion).toLocaleDateString('es-AR') }}
+              </p>
+
+              <p>
+                Estado actual:
+                <strong>{{ item.estado }}</strong>
+              </p>
+
+              <!-- EL RECOLECTOR SOLO PUEDE CAMBIAR EL ESTADO -->
+              <ion-select
+                :value="item.estado"
+                label="Actualizar estado"
+                label-placement="stacked"
+                interface="popover"
+                :disabled="actualizandoIds.includes(item.id)"
+                @ionChange="actualizarEstadoSolicitud(item, $event.detail.value)"
+              >
+                <ion-select-option value="Pendiente">
+                  Pendiente
                 </ion-select-option>
 
-                <ion-select-option value="Electrodomésticos / Voluminosos">
-                  Electrodomésticos / Voluminosos
+                <ion-select-option value="Observada">
+                  Observada
                 </ion-select-option>
 
-                <ion-select-option value="Aceite Vegetal Usado">
-                  Aceite Vegetal Usado
+                <ion-select-option value="En camino">
+                  En camino
+                </ion-select-option>
+
+                <ion-select-option value="Finalizada">
+                  Finalizada
                 </ion-select-option>
               </ion-select>
-            </ion-item>
+            </ion-label>
+          </ion-item>
+        </ion-list>
+      </template>
 
-            <!-- Dirección de retiro -->
-            <ion-item lines="full">
-              <ion-input
-                v-model="form.direccion"
-                label="Dirección de Retiro"
-                label-placement="stacked"
-                placeholder="Ej: Av. Mitre 1234"
-                required
-                @ionInput="limpiarCoordenadas"
-              />
-            </ion-item>
-
-            <!-- Abrir mapa -->
-            <ion-button
-              expand="block"
-              fill="outline"
-              class="app-boton ion-margin-top"
-              type="button"
-              @click="modalUbicacionAbierto = true"
-            >
-              <ion-icon
-                :icon="locationOutline"
-                slot="start"
-              />
-              Seleccionar ubicación en el mapa
-            </ion-button>
-
-            <!-- Mostrar coordenadas elegidas -->
-            <ion-note
-              v-if="form.latitud !== null && form.longitud !== null"
-              color="success"
-            >
-              <p class="coordenadas-seleccionadas">
-                <ion-icon :icon="checkmarkCircleOutline" />
-                Ubicación seleccionada
-              </p>
-
-              <p class="coordenadas-seleccionadas">
-                Latitud: {{ form.latitud.toFixed(6) }}
-              </p>
-
-              <p class="coordenadas-seleccionadas">
-                Longitud: {{ form.longitud.toFixed(6) }}
-              </p>
-            </ion-note>
-
-            <!-- Observaciones -->
-            <ion-item lines="full">
-              <ion-textarea
-                v-model="form.observaciones"
-                label="Observaciones / Detalles"
-                label-placement="stacked"
-                placeholder="Ej: 2 bolsas grandes de ramas frente al garage"
-                :rows="3"
-              />
-            </ion-item>
-
-            <!-- Dictar observaciones por voz -->
-            <ion-button
-              expand="block"
-              fill="outline"
-              type="button"
-              class="app-boton ion-margin-top"
-              :disabled="escuchandoVoz"
-              @click="dictarObservaciones"
-            >
-              <ion-icon
-                :icon="micOutline"
-                slot="start"
-              />
-
-              {{
-                escuchandoVoz
-                  ? 'Escuchando...'
-                  : 'Dictar observaciones'
-              }}
-            </ion-button>
-
-            <!-- Enviar solicitud -->
-            <ion-button
-              expand="block"
-              type="submit"
-              color="primary"
-              class="app-boton ion-margin-top"
-            >
-              <ion-icon
-                :icon="sendOutline"
-                slot="start"
-              />
-              Enviar Solicitud
-            </ion-button>
-          </form>
-        </ion-card-content>
-      </ion-card>
-
-      <!-- Historial de solicitudes -->
-      <h3 class="app-seccion-titulo">
-        Mis Solicitudes
-      </h3>
-
-      <!-- Estado vacío -->
-      <div v-if="solicitudes.length === 0">
-        <ion-note class="app-mensaje-vacio">
-          No tenés solicitudes registradas aún.
-        </ion-note>
-      </div>
-
-      <!-- Lista de solicitudes -->
-      <ion-list v-else lines="full">
-        <ion-item
-          v-for="item in solicitudes"
-          :key="item.id"
-          class="app-lista-item"
-        >
-          <ion-label>
-            <h2>
-              <strong>{{ item.tipo }}</strong>
-            </h2>
-
-            <p>📍 {{ item.direccion }}</p>
-
-            <p v-if="item.observaciones">
-              💬 {{ item.observaciones }}
-            </p>
-
-            <p
-              v-if="item.latitud != null && item.longitud != null"
-            >
-              Coordenadas: {{ item.latitud.toFixed(6) }},
-              {{ item.longitud.toFixed(6) }}
-            </p>
-
-            <ion-note color="medium">
-              Fecha: {{ item.fecha }}
-            </ion-note>
-          </ion-label>
-
-          <!-- Estado de envío -->
-          <ion-badge
-            slot="end"
-            :color="obtenerEstado(item.estado).color"
-            class="app-estado-badge"
-          >
-            <ion-icon
-              :icon="obtenerEstado(item.estado).icono"
-            />
-
-            {{ obtenerEstado(item.estado).texto }}
-          </ion-badge>
-        </ion-item>
-      </ion-list>
+      <!-- Usuario autenticado sin rol reconocido -->
+      <ion-note
+        v-else
+        color="warning"
+      >
+        No se pudo identificar tu rol. Cerrá sesión y volvé a ingresar.
+      </ion-note>
     </ion-content>
 
-    <!-- Selector de ubicación -->
+    <!-- EL MAPA DE CREACIÓN SOLO EXISTE PARA EL ADMINISTRADOR -->
     <SelectorUbicacion
+      v-if="esAdministrador"
       :abierto="modalUbicacionAbierto"
       :direccion-inicial="form.direccion"
       :latitud-inicial="form.latitud"
@@ -261,7 +350,13 @@ import {
 import SelectorUbicacion from '@/components/SelectorUbicacion.vue';
 
 import {
-  crear_solicitud_api
+  crear_solicitud_api,
+  listar_solicitudes_api,
+  actualizar_estado_solicitud_api
+} from '@/servicies/solicitudes_service';
+
+import type {
+  SolicitudApi
 } from '@/servicies/solicitudes_service';
 
 import {
@@ -278,7 +373,7 @@ interface Solicitud {
   direccion: string;
   observaciones: string;
   fecha: string;
-  estado: 'enviada' | 'sin_enviar';
+  estado: string;
   latitud?: number | null;
   longitud?: number | null;
 }
@@ -300,9 +395,40 @@ const form = ref({
 });
 
 const solicitudes = ref<Solicitud[]>([]);
-const modalUbicacionAbierto = ref(false);
 
-// Estado del reconocimiento de voz.
+// Detectar y normalizar el rol del usuario autenticado.
+const usuarioGuardado = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('usuario') || '{}');
+  } catch {
+    return {};
+  }
+})();
+
+const normalizarRol = (rol: unknown): string => {
+  if (typeof rol === 'string') {
+    return rol.trim().toLowerCase();
+  }
+
+  if (rol && typeof rol === 'object' && 'codigo' in rol) {
+    return String(rol.codigo).trim().toLowerCase();
+  }
+
+  return '';
+};
+
+const rolUsuario = normalizarRol(usuarioGuardado.rol);
+
+const esAdministrador = rolUsuario === 'administrador';
+const esRecolector = rolUsuario === 'recolector';
+
+console.log('Rol detectado en SolicitudesPage:', rolUsuario);
+
+const cargandoSolicitudes = ref(false);
+const solicitudesRecolector = ref<SolicitudApi[]>([]);
+const actualizandoIds = ref<number[]>([]);
+
+const modalUbicacionAbierto = ref(false);
 const escuchandoVoz = ref(false);
 
 const ESTADO_POR_DEFECTO = {
@@ -321,21 +447,25 @@ const obtenerEstado = (estado: string) => {
 
 // Aplicar la ubicación confirmada en el mapa.
 const aplicarUbicacion = (ubicacion: Ubicacion) => {
+  if (!esAdministrador) return;
+
   form.value.direccion = ubicacion.direccion;
   form.value.latitud = ubicacion.latitud;
   form.value.longitud = ubicacion.longitud;
 };
 
-// Si el usuario edita manualmente la dirección,
-// se eliminan las coordenadas para evitar datos incorrectos.
+// Si se modifica manualmente la dirección,
+// se eliminan las coordenadas anteriores.
 const limpiarCoordenadas = () => {
+  if (!esAdministrador) return;
+
   form.value.latitud = null;
   form.value.longitud = null;
 };
 
-// Dictar y agregar texto a las observaciones.
+// Dictar observaciones por voz.
 const dictarObservaciones = async () => {
-  if (escuchandoVoz.value) {
+  if (!esAdministrador || escuchandoVoz.value) {
     return;
   }
 
@@ -375,7 +505,13 @@ const dictarObservaciones = async () => {
 };
 
 // Cargar solicitudes guardadas localmente.
+// Este historial es exclusivo del administrador.
 const cargarSolicitudes = () => {
+  if (!esAdministrador) {
+    solicitudes.value = [];
+    return;
+  }
+
   const guardadas = localStorage.getItem(SOLICITUDES_KEY);
 
   if (guardadas) {
@@ -394,23 +530,108 @@ const cargarSolicitudes = () => {
   }
 };
 
-// Actualizar historial después de la sincronización.
+// Actualizar historial local después de la sincronización.
 const actualizarDesdeSincronizacion = () => {
-  cargarSolicitudes();
+  if (esAdministrador) {
+    cargarSolicitudes();
+  }
 };
 
-// Recargar historial mediante el gesto de Ionic.
+// Consultar las solicitudes recibidas por el recolector.
+const cargarSolicitudesRecolector = async () => {
+  if (!esRecolector) {
+    solicitudesRecolector.value = [];
+    return;
+  }
+
+  cargandoSolicitudes.value = true;
+
+  try {
+    solicitudesRecolector.value = await listar_solicitudes_api();
+  } catch (error) {
+    console.error(
+      'Error al cargar solicitudes del recolector:',
+      error
+    );
+
+    await mostrarToast(
+      'No se pudieron cargar las solicitudes recibidas.',
+      'danger'
+    );
+  } finally {
+    cargandoSolicitudes.value = false;
+  }
+};
+
+// Actualizar el estado de una solicitud.
+// La API valida los permisos y registra el historial.
+const actualizarEstadoSolicitud = async (
+  solicitud: SolicitudApi,
+  estadoNuevo: string | undefined
+) => {
+  if (
+    !esRecolector ||
+    !estadoNuevo ||
+    estadoNuevo === solicitud.estado
+  ) {
+    return;
+  }
+
+  if (actualizandoIds.value.includes(solicitud.id)) {
+    return;
+  }
+
+  actualizandoIds.value.push(solicitud.id);
+
+  try {
+    await actualizar_estado_solicitud_api(solicitud.id, {
+      estado: estadoNuevo,
+      observacion: `Estado actualizado a ${estadoNuevo} desde la aplicación.`
+    });
+
+    await cargarSolicitudesRecolector();
+
+    await mostrarToast(
+      'Estado actualizado correctamente.',
+      'success'
+    );
+  } catch (error) {
+    console.error(
+      'Error al actualizar el estado:',
+      error
+    );
+
+    await mostrarToast(
+      'No se pudo actualizar el estado de la solicitud.',
+      'danger'
+    );
+  } finally {
+    actualizandoIds.value = actualizandoIds.value.filter(
+      id => id !== solicitud.id
+    );
+  }
+};
+
+// Recargar la información correspondiente a cada rol.
 const hacerRecarga = async (event: CustomEvent) => {
-  cargarSolicitudes();
-
-  setTimeout(() => {
+  try {
+    if (esAdministrador) {
+      cargarSolicitudes();
+    } else if (esRecolector) {
+      await cargarSolicitudesRecolector();
+    }
+  } finally {
     event.detail.complete();
-  }, 500);
+  }
 };
 
-// Registrar eventos de sincronización.
+// Cargar información al abrir la pantalla.
 onMounted(() => {
-  cargarSolicitudes();
+  if (esAdministrador) {
+    cargarSolicitudes();
+  } else if (esRecolector) {
+    void cargarSolicitudesRecolector();
+  }
 
   window.addEventListener(
     'solicitudes-sincronizadas',
@@ -418,7 +639,7 @@ onMounted(() => {
   );
 });
 
-// Eliminar evento al salir de la vista.
+// Quitar el evento al salir de la pantalla.
 onUnmounted(() => {
   window.removeEventListener(
     'solicitudes-sincronizadas',
@@ -426,8 +647,10 @@ onUnmounted(() => {
   );
 });
 
-// Limpiar formulario.
+// Limpiar el formulario de creación.
 const limpiarFormulario = () => {
+  if (!esAdministrador) return;
+
   form.value = {
     tipo: '',
     direccion: '',
@@ -437,7 +660,7 @@ const limpiarFormulario = () => {
   };
 };
 
-// Mostrar notificación.
+// Mostrar notificaciones.
 const mostrarToast = async (
   mensaje: string,
   color: 'success' | 'warning' | 'danger'
@@ -452,8 +675,16 @@ const mostrarToast = async (
   await toast.present();
 };
 
-// Enviar solicitud.
+// Crear solicitud: únicamente el administrador.
 const enviarSolicitud = async () => {
+  if (!esAdministrador) {
+    await mostrarToast(
+      'No tenés permisos para crear solicitudes.',
+      'danger'
+    );
+    return;
+  }
+
   if (
     !form.value.tipo ||
     !form.value.direccion.trim()
@@ -466,8 +697,7 @@ const enviarSolicitud = async () => {
     return;
   }
 
-  // Copiamos los datos antes de enviar para mantener
-  // la misma información en caso de un error de conexión.
+  // Conservar los datos para poder guardarlos sin conexión.
   const datosLocales = {
     tipo: form.value.tipo,
     direccion: form.value.direccion.trim(),

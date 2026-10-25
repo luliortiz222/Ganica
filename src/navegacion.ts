@@ -1,8 +1,10 @@
-import { 
-  homeOutline, 
-  locationOutline, 
-  documentTextOutline, 
-  personOutline 
+
+import {
+  homeOutline,
+  locationOutline,
+  documentTextOutline,
+  personOutline,
+  timeOutline
 } from 'ionicons/icons';
 
 export interface RutaNavegacion {
@@ -23,7 +25,7 @@ export const rutasNavegacion: RutaNavegacion[] = [
     titulo: 'Inicio',
     icono: homeOutline,
     componente: () => import('@/views/HomePage.vue'),
-    meta: { roles: ['TODOS'] }, // Accesible para todos los autenticados
+    meta: { roles: ['TODOS'] },
   },
   {
     name: 'Puntos',
@@ -31,7 +33,7 @@ export const rutasNavegacion: RutaNavegacion[] = [
     titulo: 'Puntos de Retiro',
     icono: locationOutline,
     componente: () => import('@/views/PuntosPage.vue'),
-    meta: { roles: ['administrador', 'recolector'] }, // Admin y operativo
+    meta: { roles: ['administrador', 'recolector'] },
   },
   {
     name: 'Solicitudes',
@@ -39,7 +41,15 @@ export const rutasNavegacion: RutaNavegacion[] = [
     titulo: 'Solicitudes',
     icono: documentTextOutline,
     componente: () => import('@/views/SolicitudesPage.vue'),
-    meta: { roles: ['administrador'] }, // Exclusivo del administrador
+    meta: { roles: ['administrador'] },
+  },
+  {
+    name: 'HistorialSolicitudes',
+    path: '/historial-solicitudes',
+    titulo: 'Historial de solicitudes',
+    icono: timeOutline,
+    componente: () => import('@/views/HistorialSolicitudesPage.vue'),
+    meta: { roles: ['administrador'] },
   },
   {
     name: 'MiCuenta',
@@ -47,6 +57,6 @@ export const rutasNavegacion: RutaNavegacion[] = [
     titulo: 'Mi Cuenta',
     icono: personOutline,
     componente: () => import('@/views/MiCuentaPage.vue'),
-    meta: { roles: ['TODOS'] }, // Accesible para todos (cada quien edita su perfil)
+    meta: { roles: ['TODOS'] },
   },
 ];

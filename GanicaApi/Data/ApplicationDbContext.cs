@@ -18,6 +18,12 @@ public class ApplicationDbContext : DbContext
     public DbSet<Entrega> Entregas { get; set; }
     public DbSet<Notificacion> Notificaciones { get; set; }
 
+    public DbSet<HistorialEntrega> HistorialEntregas { get; set; } = null!;
+
+    public DbSet<HistorialNotificacion> HistorialNotificaciones { get; set; }
+
+    public DbSet<HistorialSolicitud> HistorialSolicitudes { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -40,5 +46,50 @@ public class ApplicationDbContext : DbContext
                 Activo = true
             }
         );
+
+modelBuilder.Entity<HistorialEntrega>()
+    .HasOne(h => h.Entrega)
+    .WithMany()
+    .HasForeignKey(h => h.EntregaId)
+    .OnDelete(DeleteBehavior.Cascade);
+
+modelBuilder.Entity<HistorialEntrega>()
+    .HasOne(h => h.Usuario)
+    .WithMany()
+    .HasForeignKey(h => h.UsuarioId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+
+    modelBuilder.Entity<HistorialNotificacion>()
+    .HasOne(h => h.Notificacion)
+    .WithMany()
+    .HasForeignKey(h => h.NotificacionId)
+    .OnDelete(DeleteBehavior.Cascade);
+
+modelBuilder.Entity<HistorialNotificacion>()
+    .HasOne(h => h.Usuario)
+    .WithMany()
+    .HasForeignKey(h => h.UsuarioId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+    modelBuilder.Entity<HistorialSolicitud>()
+    .HasOne(h => h.Solicitud)
+    .WithMany()
+    .HasForeignKey(h => h.SolicitudId)
+    .OnDelete(DeleteBehavior.Cascade);
+
+modelBuilder.Entity<HistorialSolicitud>()
+    .HasOne(h => h.Usuario)
+    .WithMany()
+    .HasForeignKey(h => h.UsuarioId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+    modelBuilder.Entity<Notificacion>()
+    .HasOne(n => n.Solicitud)
+    .WithMany()
+    .HasForeignKey(n => n.SolicitudId)
+    .OnDelete(DeleteBehavior.SetNull);
     }
+
+    
 }
