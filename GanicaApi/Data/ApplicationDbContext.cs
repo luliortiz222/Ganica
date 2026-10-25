@@ -89,6 +89,15 @@ modelBuilder.Entity<HistorialSolicitud>()
     .WithMany()
     .HasForeignKey(n => n.SolicitudId)
     .OnDelete(DeleteBehavior.SetNull);
+
+
+modelBuilder.Entity<Solicitud>()
+    .HasOne(s => s.Usuario)
+    .WithMany()
+    .HasForeignKey(s => s.UsuarioId)
+    .OnDelete(DeleteBehavior.SetNull);
+
+
     }
 
     

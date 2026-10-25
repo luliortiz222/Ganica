@@ -1,3 +1,4 @@
+
 using System.Security.Claims;
 using GanicaApi.Data;
 using GanicaApi.Models;
@@ -26,8 +27,9 @@ public class SolicitudesController : ControllerBase
     }
 
     // Listar solicitudes:
-    // Administrador: todas las solicitudes.
-    // Recolector: solamente las solicitudes que recibió mediante notificación.
+    // Administrador: todas.
+    // Recolector: las recibidas mediante notificación.
+    // Vecino: solamente las que creó.
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Solicitud>>> GetSolicitudes()
     {
@@ -41,8 +43,7 @@ public class SolicitudesController : ControllerBase
 
         if (User.IsInRole("administrador"))
         {
-            var todas = await consulta.ToListAsync();
-            return Ok(todas);
+            return Ok(await consulta.ToListAsync());
         }
 
         if (User.IsInRole("recolector"))
@@ -56,17 +57,35 @@ public class SolicitudesController : ControllerBase
             return Ok(recibidas);
         }
 
+        if (User.IsInRole("vecino"))
+        {
+            var propias = await consulta
+                .Where(s => s.UsuarioId == usuarioId)
+                .ToListAsync();
+
+            return Ok(propias);
+        }
+
         return Forbid();
     }
 
-    // Crear solicitudes: exclusivamente el administrador.
+    // Crear solicitudes:
+    // Administrador y vecino.
     [HttpPost]
-    [Authorize(Roles = "administrador")]
+    [Authorize(Roles = "administrador,vecino")]
     public async Task<ActionResult<Solicitud>> PostSolicitud(
         [FromBody] Solicitud solicitud)
     {
         if (!ObtenerUsuarioId(out var usuarioId))
             return Unauthorized();
+
+        if (solicitud == null)
+        {
+            return BadRequest(new
+            {
+                mensaje = "Los datos de la solicitud son obligatorios."
+            });
+        }
 
         if (string.IsNullOrWhiteSpace(solicitud.TipoResiduo))
         {
@@ -95,9 +114,40 @@ public class SolicitudesController : ControllerBase
             });
         }
 
+        // Validar que el tipo de residuo esté permitido.
+        var tiposPermitidos = new[]
+        {
+            "Poda y Escombros",
+            "Electrodomésticos-Voluminosos",
+            "Aceite Vegetal Usado"
+        };
+
+        var tipoResiduo = tiposPermitidos.FirstOrDefault(t =>
+            t.Equals(
+                solicitud.TipoResiduo.Trim(),
+                StringComparison.OrdinalIgnoreCase));
+
+        if (tipoResiduo == null)
+        {
+            return BadRequest(new
+            {
+                mensaje = "El tipo de residuo indicado no es válido.",
+                tiposPermitidos
+            });
+        }
+
+        solicitud.TipoResiduo = tipoResiduo;
         solicitud.ServicioRecoleccionId = servicio.Id;
         solicitud.FechaCreacion = DateTime.Now;
         solicitud.Estado = "Pendiente";
+
+        // Nunca confiar en un UsuarioId enviado desde el cliente.
+        // Se utiliza la identidad autenticada del token.
+        solicitud.UsuarioId = usuarioId;
+
+        // Evitar que el cliente intente asignar otra entidad de navegación.
+        solicitud.Usuario = null;
+        solicitud.ServicioRecoleccion = null;
 
         _context.Solicitudes.Add(solicitud);
         await _context.SaveChangesAsync();
@@ -111,10 +161,12 @@ public class SolicitudesController : ControllerBase
             EstadoAnterior = null,
             EstadoNuevo = solicitud.Estado,
             Fecha = DateTimeOffset.UtcNow,
-            Observacion = "Solicitud de recolección creada."
+            Observacion = User.IsInRole("vecino")
+                ? "Solicitud de recolección creada por un vecino."
+                : "Solicitud de recolección creada por un administrador."
         });
 
-        // Buscar los recolectores activos.
+        // Buscar recolectores activos.
         var recolectores = await _context.Usuarios
             .Include(u => u.Rol)
             .Where(u =>
@@ -145,43 +197,68 @@ public class SolicitudesController : ControllerBase
         return Ok(solicitud);
     }
 
-    // Consultar el historial: exclusivamente el administrador.
+    // Consultar historial: exclusivamente administrador.
     [HttpGet("historial")]
-    [Authorize(Roles = "administrador")]
-    public async Task<IActionResult> GetHistorialSolicitudes()
-    {
-        var historial = await _context.HistorialSolicitudes
-            .AsNoTracking()
-            .Include(h => h.Solicitud)
-            .Include(h => h.Usuario)
-            .OrderByDescending(h => h.Fecha)
-            .Select(h => new
-            {
-                h.Id,
-                h.SolicitudId,
-                h.UsuarioId,
-                UsuarioEmail = h.Usuario != null
-                    ? h.Usuario.Email
-                    : null,
-                h.Accion,
-                h.EstadoAnterior,
-                h.EstadoNuevo,
-                h.Fecha,
-                h.Observacion,
-                TipoResiduo = h.Solicitud != null
-                    ? h.Solicitud.TipoResiduo
-                    : null,
-                Direccion = h.Solicitud != null
-                    ? h.Solicitud.Direccion
-                    : null
-            })
-            .ToListAsync();
+[Authorize(Roles = "administrador,vecino")]
+public async Task<IActionResult> GetHistorialSolicitudes()
+{
+    if (!ObtenerUsuarioId(out var usuarioId))
+        return Unauthorized();
 
-        return Ok(historial);
+    var consulta = _context.HistorialSolicitudes
+        .AsNoTracking()
+        .AsQueryable();
+
+    // El administrador puede consultar toda la trazabilidad.
+    if (User.IsInRole("administrador"))
+    {
+        // No se aplica ningún filtro.
+    }
+    // El vecino solo puede consultar los eventos
+    // de solicitudes cuyo UsuarioId sea el suyo.
+    else if (User.IsInRole("vecino"))
+    {
+        consulta = consulta.Where(h =>
+            h.Solicitud != null &&
+            h.Solicitud.UsuarioId == usuarioId);
+    }
+    else
+    {
+        return Forbid();
     }
 
-    // Actualizar el estado de una solicitud.
-    // Solo administrador o recolector.
+    var historial = await consulta
+        .OrderByDescending(h => h.Fecha)
+        .Select(h => new
+        {
+            h.Id,
+            h.SolicitudId,
+            h.UsuarioId,
+
+            UsuarioEmail = h.Usuario != null
+                ? h.Usuario.Email
+                : null,
+
+            h.Accion,
+            h.EstadoAnterior,
+            h.EstadoNuevo,
+            h.Fecha,
+            h.Observacion,
+
+            TipoResiduo = h.Solicitud != null
+                ? h.Solicitud.TipoResiduo
+                : null,
+
+            Direccion = h.Solicitud != null
+                ? h.Solicitud.Direccion
+                : null
+        })
+        .ToListAsync();
+
+    return Ok(historial);
+}
+
+    // Actualizar estado: administrador o recolector.
     [HttpPatch("{id}/estado")]
     [Authorize(Roles = "administrador,recolector")]
     public async Task<IActionResult> ActualizarEstado(
@@ -208,8 +285,8 @@ public class SolicitudesController : ControllerBase
             "Finalizada"
         };
 
-        var estadoNuevo = estadosPermitidos.FirstOrDefault(
-            e => e.Equals(
+        var estadoNuevo = estadosPermitidos.FirstOrDefault(e =>
+            e.Equals(
                 request.Estado.Trim(),
                 StringComparison.OrdinalIgnoreCase));
 
@@ -243,9 +320,7 @@ public class SolicitudesController : ControllerBase
                     n.UsuarioId == usuarioId);
 
             if (!tieneAsignacion)
-            {
                 return Forbid();
-            }
         }
 
         var estadoAnterior = solicitud.Estado;
@@ -263,7 +338,6 @@ public class SolicitudesController : ControllerBase
 
         solicitud.Estado = estadoNuevo;
 
-        // Registrar el cambio en el historial.
         _context.HistorialSolicitudes.Add(new HistorialSolicitud
         {
             SolicitudId = solicitud.Id,
@@ -289,7 +363,6 @@ public class SolicitudesController : ControllerBase
     }
 }
 
-// Datos recibidos para actualizar el estado.
 public class ActualizarEstadoSolicitudRequest
 {
     public string Estado { get; set; } = string.Empty;

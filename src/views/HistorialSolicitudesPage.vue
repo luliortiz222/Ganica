@@ -24,7 +24,13 @@
 
         <div>
           <h1>Trazabilidad</h1>
-          <p>Seguimiento de las solicitudes de recolección</p>
+          <p>
+            {{
+              esAdministrador
+                ? 'Trazabilidad completa de todas las solicitudes'
+                : 'Seguimiento y trazabilidad de tus solicitudes'
+            }}
+          </p>
         </div>
       </div>
 
@@ -74,13 +80,20 @@
         <ion-icon :icon="fileTrayOutline" />
         <h2>Sin registros todavía</h2>
         <p>
-          Cuando se creen solicitudes o cambien sus estados,
-          los eventos aparecerán aquí.
+          {{
+            esAdministrador
+              ? 'Cuando se creen solicitudes o cambien sus estados, los eventos aparecerán aquí.'
+              : 'Cuando se registren tus solicitudes o cambien sus estados, los eventos aparecerán aquí.'
+          }}
         </p>
       </div>
 
       <!-- Solicitudes plegables -->
-      <ion-accordion-group :multiple="true" class="grupos-acordeon">
+      <ion-accordion-group
+        v-if="solicitudes.length > 0"
+        :multiple="true"
+        class="grupos-acordeon"
+      >
         <ion-accordion
           v-for="grupo in solicitudes"
           :key="grupo.solicitudId"
@@ -239,6 +252,32 @@ const historial = ref<HistorialSolicitudApi[]>([]);
 const cargando = ref(false);
 const error = ref('');
 
+/*
+ * Detectar el rol guardado en el dispositivo.
+ * La autorización real y el filtrado de solicitudes
+ * deben realizarse también en el backend usando el JWT.
+ */
+const usuarioGuardado = (() => {
+  try {
+    return JSON.parse(localStorage.getItem('usuario') || '{}');
+  } catch {
+    return {};
+  }
+})();
+
+const rolGuardado = usuarioGuardado.rol;
+
+const rolUsuario = (
+  typeof rolGuardado === 'string'
+    ? rolGuardado
+    : rolGuardado?.codigo ?? ''
+)
+  .trim()
+  .toLowerCase();
+
+const esAdministrador = rolUsuario === 'administrador';
+const esVecino = rolUsuario === 'vecino';
+
 const solicitudes = computed(() => {
   const grupos = new Map<
     number,
@@ -268,6 +307,7 @@ const solicitudes = computed(() => {
   const resultado = Array.from(grupos.values());
 
   for (const grupo of resultado) {
+    // Orden cronológico inverso: el evento más reciente primero.
     grupo.eventos.sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
     );
@@ -380,6 +420,7 @@ async function cargarHistorial() {
     historial.value = await listar_historial_solicitudes_api();
   } catch (e) {
     console.error('Error al cargar el historial:', e);
+
     error.value =
       'No se pudo cargar el historial. Verificá tu conexión y tus permisos.';
   } finally {
@@ -772,3 +813,4 @@ onMounted(cargarHistorial);
   }
 }
 </style>
+

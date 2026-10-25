@@ -383,9 +383,14 @@ namespace GanicaApi.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<long?>("UsuarioId")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ServicioRecoleccionId");
+
+                    b.HasIndex("UsuarioId");
 
                     b.ToTable("Solicitudes");
                 });
@@ -523,7 +528,14 @@ namespace GanicaApi.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GanicaApi.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("ServicioRecoleccion");
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("GanicaApi.Models.Usuario", b =>

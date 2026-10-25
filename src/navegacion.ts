@@ -4,7 +4,8 @@ import {
   locationOutline,
   documentTextOutline,
   personOutline,
-  timeOutline
+  timeOutline, 
+  addCircleOutline
 } from 'ionicons/icons';
 
 export interface RutaNavegacion {
@@ -44,13 +45,16 @@ export const rutasNavegacion: RutaNavegacion[] = [
     meta: { roles: ['administrador'] },
   },
   {
-    name: 'HistorialSolicitudes',
-    path: '/historial-solicitudes',
-    titulo: 'Historial de solicitudes',
-    icono: timeOutline,
-    componente: () => import('@/views/HistorialSolicitudesPage.vue'),
-    meta: { roles: ['administrador'] },
-  },
+  name: 'HistorialSolicitudes',
+  path: '/historial-solicitudes',
+  titulo: 'Historial de solicitudes',
+  icono: timeOutline,
+  componente: () =>
+    import('@/views/HistorialSolicitudesPage.vue'),
+  meta: {
+    roles: ['administrador', 'vecino']
+  }
+},
   {
     name: 'MiCuenta',
     path: '/micuenta',
@@ -59,4 +63,13 @@ export const rutasNavegacion: RutaNavegacion[] = [
     componente: () => import('@/views/MiCuentaPage.vue'),
     meta: { roles: ['TODOS'] },
   },
+
+  {
+  name: 'NuevaSolicitud',
+  path: '/nueva-solicitud',
+  titulo: 'Solicitar retiro',
+  icono: addCircleOutline,
+  componente: () => import('@/views/NuevaSolicitudPage.vue'),
+  meta: { roles: ['vecino'] }
+},
 ];
