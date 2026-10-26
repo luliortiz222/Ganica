@@ -1,10 +1,10 @@
-
 using System.Security.Claims;
 using GanicaApi.Data;
 using GanicaApi.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 
 namespace GanicaApi.Controllers;
 
@@ -258,44 +258,43 @@ public async Task<IActionResult> GetHistorialSolicitudes()
     return Ok(historial);
 }
 
-    // Actualizar estado: administrador o recolector.
-    [HttpPatch("{id}/estado")]
-    [Authorize(Roles = "administrador,recolector")]
-    public async Task<IActionResult> ActualizarEstado(
+
+    // Guardar la firma de conformidad del vecino.
+    // Solo puede firmar el vecino propietario de la solicitud.
+    [HttpPost("{id}/firma")]
+    [Authorize(Roles = "vecino")]
+    [RequestSizeLimit(2_000_000)]
+    public async Task<IActionResult> GuardarFirma(
         int id,
-        [FromBody] ActualizarEstadoSolicitudRequest request)
+        [FromForm] IFormFile? firma)
     {
         if (!ObtenerUsuarioId(out var usuarioId))
             return Unauthorized();
 
-        if (request == null ||
-            string.IsNullOrWhiteSpace(request.Estado))
+        if (firma == null || firma.Length == 0)
         {
             return BadRequest(new
             {
-                mensaje = "Debés indicar el nuevo estado."
+                mensaje = "Debés adjuntar la firma del vecino."
             });
         }
 
-        var estadosPermitidos = new[]
-        {
-            "Pendiente",
-            "Observada",
-            "En camino",
-            "Finalizada"
-        };
-
-        var estadoNuevo = estadosPermitidos.FirstOrDefault(e =>
-            e.Equals(
-                request.Estado.Trim(),
-                StringComparison.OrdinalIgnoreCase));
-
-        if (estadoNuevo == null)
+        if (firma.Length > 1_500_000)
         {
             return BadRequest(new
             {
-                mensaje = "El estado indicado no es válido.",
-                estadosPermitidos
+                mensaje = "La firma no puede superar 1,5 MB."
+            });
+        }
+
+        if (!string.Equals(
+            firma.ContentType,
+            "image/png",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                mensaje = "La firma debe enviarse en formato PNG."
             });
         }
 
@@ -310,57 +309,253 @@ public async Task<IActionResult> GetHistorialSolicitudes()
             });
         }
 
-        // El recolector solo puede modificar solicitudes
-        // que le fueron notificadas.
-        if (User.IsInRole("recolector"))
+        // Seguridad: el vecino solo puede firmar su propia solicitud.
+        if (solicitud.UsuarioId != usuarioId)
         {
-            var tieneAsignacion = await _context.Notificaciones
-                .AnyAsync(n =>
-                    n.SolicitudId == id &&
-                    n.UsuarioId == usuarioId);
-
-            if (!tieneAsignacion)
-                return Forbid();
+            return Forbid();
         }
 
-        var estadoAnterior = solicitud.Estado;
-
-        if (string.Equals(
-            estadoAnterior,
-            estadoNuevo,
-            StringComparison.OrdinalIgnoreCase))
+        // La firma solo está habilitada cuando el recolector
+        // cambió el estado a "En camino".
+        if (solicitud.Estado != "En camino")
         {
             return BadRequest(new
             {
-                mensaje = "La solicitud ya tiene ese estado."
+                mensaje =
+                    "Podés firmar la conformidad únicamente cuando la solicitud esté en estado 'En camino'."
             });
         }
 
-        solicitud.Estado = estadoNuevo;
-
-        _context.HistorialSolicitudes.Add(new HistorialSolicitud
+        if (!string.IsNullOrWhiteSpace(
+            solicitud.FirmaConformidadArchivo))
         {
-            SolicitudId = solicitud.Id,
-            UsuarioId = usuarioId,
-            Accion = "EstadoActualizado",
-            EstadoAnterior = estadoAnterior,
-            EstadoNuevo = estadoNuevo,
-            Fecha = DateTimeOffset.UtcNow,
-            Observacion = string.IsNullOrWhiteSpace(request.Observacion)
-                ? $"Estado cambiado de {estadoAnterior} a {estadoNuevo}."
-                : request.Observacion.Trim()
-        });
+            return BadRequest(new
+            {
+                mensaje = "Esta solicitud ya tiene una firma registrada."
+            });
+        }
 
-        await _context.SaveChangesAsync();
+        // Validar la firma binaria real del PNG.
+        byte[] encabezado = new byte[8];
 
-        return Ok(new
+        await using (var stream = firma.OpenReadStream())
         {
-            mensaje = "Estado actualizado correctamente.",
-            solicitudId = solicitud.Id,
-            estadoAnterior,
-            estadoNuevo
+            int leidos = await stream.ReadAsync(encabezado.AsMemory());
+
+            byte[] firmaPng =
+            {
+                137, 80, 78, 71, 13, 10, 26, 10
+            };
+
+            if (leidos != 8 ||
+                !encabezado.SequenceEqual(firmaPng))
+            {
+                return BadRequest(new
+                {
+                    mensaje = "El archivo enviado no es un PNG válido."
+                });
+            }
+        }
+
+        // Guardar la imagen fuera de wwwroot para que no
+        // quede publicada directamente como archivo estático.
+        var carpeta = Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "App_Data",
+            "FirmasSolicitudes");
+
+        Directory.CreateDirectory(carpeta);
+
+        var nombreArchivo = $"{Guid.NewGuid():N}.png";
+        var rutaArchivo = Path.Combine(carpeta, nombreArchivo);
+
+        var estadoAnterior = solicitud.Estado;
+
+        try
+        {
+            await using (var destino = new FileStream(
+                rutaArchivo,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                await firma.CopyToAsync(destino);
+            }
+
+            solicitud.FirmaConformidadArchivo = nombreArchivo;
+            solicitud.FirmaConformidadFecha = DateTimeOffset.UtcNow;
+            solicitud.Estado = "Finalizada";
+
+            _context.HistorialSolicitudes.Add(
+                new HistorialSolicitud
+                {
+                    SolicitudId = solicitud.Id,
+
+                    // El evento lo registra el vecino autenticado.
+                    UsuarioId = usuarioId,
+
+                    Accion = "FirmaConformidadRegistrada",
+                    EstadoAnterior = estadoAnterior,
+                    EstadoNuevo = "Finalizada",
+                    Fecha = DateTimeOffset.UtcNow,
+                    Observacion =
+                        "El vecino registró su firma de conformidad. La solicitud quedó finalizada."
+                });
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                mensaje =
+                    "Firma de conformidad registrada correctamente.",
+                solicitudId = solicitud.Id,
+                estado = solicitud.Estado,
+                firmaRegistrada = true,
+                fechaFirma = solicitud.FirmaConformidadFecha
+            });
+        }
+        catch
+        {
+            // Si falla la persistencia, evitar dejar el archivo
+            // guardado sin su registro correspondiente.
+            if (System.IO.File.Exists(rutaArchivo))
+            {
+                System.IO.File.Delete(rutaArchivo);
+            }
+
+            throw;
+        }
+    }
+
+
+    // Actualizar estado: administrador o recolector.
+    
+
+[HttpPatch("{id}/estado")]
+[Authorize(Roles = "administrador,recolector")]
+public async Task<IActionResult> ActualizarEstado(
+    int id,
+    [FromBody] ActualizarEstadoSolicitudRequest request)
+{
+    if (!ObtenerUsuarioId(out var usuarioId))
+        return Unauthorized();
+
+    if (request == null ||
+        string.IsNullOrWhiteSpace(request.Estado))
+    {
+        return BadRequest(new
+        {
+            mensaje = "Debés indicar el nuevo estado."
         });
     }
+
+    var estadosPermitidos = new[]
+    {
+        "Pendiente",
+        "Observada",
+        "En camino",
+        "Finalizada"
+    };
+
+    var estadoNuevo = estadosPermitidos.FirstOrDefault(e =>
+        e.Equals(
+            request.Estado.Trim(),
+            StringComparison.OrdinalIgnoreCase));
+
+    if (estadoNuevo == null)
+    {
+        return BadRequest(new
+        {
+            mensaje = "El estado indicado no es válido.",
+            estadosPermitidos
+        });
+    }
+
+    var solicitud = await _context.Solicitudes
+        .FirstOrDefaultAsync(s => s.Id == id);
+
+    if (solicitud == null)
+    {
+        return NotFound(new
+        {
+            mensaje = "La solicitud no existe."
+        });
+    }
+
+    // Impedir cualquier modificación si ya fue finalizada.
+    if (solicitud.Estado == "Finalizada")
+    {
+        return BadRequest(new
+        {
+            mensaje =
+                "No se puede modificar una solicitud que ya fue finalizada."
+        });
+    }
+
+    // La solicitud solo puede finalizarse mediante
+    // el endpoint que guarda la firma de conformidad.
+    if (estadoNuevo == "Finalizada")
+    {
+        return BadRequest(new
+        {
+            mensaje =
+                "Para finalizar la solicitud, el vecino debe firmar la conformidad."
+        });
+    }
+
+    // El recolector solo puede modificar solicitudes
+    // que le fueron notificadas.
+    if (User.IsInRole("recolector"))
+    {
+        var tieneAsignacion = await _context.Notificaciones
+            .AnyAsync(n =>
+                n.SolicitudId == id &&
+                n.UsuarioId == usuarioId);
+
+        if (!tieneAsignacion)
+            return Forbid();
+    }
+
+    var estadoAnterior = solicitud.Estado;
+
+    if (string.Equals(
+        estadoAnterior,
+        estadoNuevo,
+        StringComparison.OrdinalIgnoreCase))
+    {
+        return BadRequest(new
+        {
+            mensaje = "La solicitud ya tiene ese estado."
+        });
+    }
+
+    solicitud.Estado = estadoNuevo;
+
+    _context.HistorialSolicitudes.Add(new HistorialSolicitud
+    {
+        SolicitudId = solicitud.Id,
+        UsuarioId = usuarioId,
+        Accion = "EstadoActualizado",
+        EstadoAnterior = estadoAnterior,
+        EstadoNuevo = estadoNuevo,
+        Fecha = DateTimeOffset.UtcNow,
+        Observacion = string.IsNullOrWhiteSpace(request.Observacion)
+            ? $"Estado cambiado de {estadoAnterior} a {estadoNuevo}."
+            : request.Observacion.Trim()
+    });
+
+    await _context.SaveChangesAsync();
+
+    return Ok(new
+    {
+        mensaje = "Estado actualizado correctamente.",
+        solicitudId = solicitud.Id,
+        estadoAnterior,
+        estadoNuevo
+    });
+}
+
+
 }
 
 public class ActualizarEstadoSolicitudRequest

@@ -1,6 +1,11 @@
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted
+} from 'vue';
 
 import {
   IonPage,
@@ -33,11 +38,25 @@ import {
   addOutline,
   createOutline,
   trashBinOutline,
-  notificationsOutline
+  notificationsOutline,
+  addCircleOutline,
+  timeOutline,
+  personOutline,
+  locationOutline
 } from 'ionicons/icons';
 
-import { obtenerTemaGuardado, aplicarTema } from '@/config/tema';
-import { servicios_store, Servicio } from '@/stores/servicios_store';
+import { useRouter } from 'vue-router';
+
+import {
+  obtenerTemaGuardado,
+  aplicarTema
+} from '@/config/tema';
+
+import {
+  servicios_store,
+  Servicio
+} from '@/stores/servicios_store';
+
 import ModalServicio from '@/components/ModalServicio.vue';
 
 import {
@@ -49,7 +68,76 @@ import {
   actualizar_estado_solicitud_api
 } from '@/servicies/solicitudes_service';
 
+const router = useRouter();
+
 const esOscuro = ref(false);
+
+// ==========================================
+// USUARIO Y ROLES
+// ==========================================
+
+const obtenerUsuarioActual = () => {
+  const usuarioGuardado = localStorage.getItem('usuario');
+
+  if (!usuarioGuardado) return null;
+
+  try {
+    return JSON.parse(usuarioGuardado);
+  } catch {
+    return null;
+  }
+};
+
+const obtenerRolActual = (): string => {
+  const usuario = obtenerUsuarioActual();
+  const rol = usuario?.rol;
+
+  // Admite tanto rol como texto como rol.codigo.
+  if (typeof rol === 'string') {
+    return rol.trim().toLowerCase();
+  }
+
+  if (rol && typeof rol === 'object' && 'codigo' in rol) {
+    return String(rol.codigo).trim().toLowerCase();
+  }
+
+  return '';
+};
+
+// El rol ahora es reactivo.
+const rolSesion = ref(obtenerRolActual());
+
+const actualizarRolSesion = () => {
+  rolSesion.value = obtenerRolActual();
+};
+
+const esAdministrador = computed(
+  () => rolSesion.value === 'administrador'
+);
+
+const esRecolector = computed(
+  () => rolSesion.value === 'recolector'
+);
+
+const esVecino = computed(
+  () => rolSesion.value === 'vecino'
+);
+
+const puedeGestionarSolicitudes = computed(
+  () => esAdministrador.value || esRecolector.value
+);
+
+const nombreUsuario = computed(() => {
+  const usuario = obtenerUsuarioActual();
+
+  return (
+    usuario?.nombre ||
+    usuario?.Nombre ||
+    usuario?.email ||
+    usuario?.Email ||
+    'Usuario'
+  );
+});
 
 // ==========================================
 // CONTROL DEL MODAL DE SERVICIOS
@@ -67,35 +155,15 @@ const mostrarAvisos = ref(false);
 const estadosActualizando = ref<number[]>([]);
 
 // ==========================================
-// USUARIO ACTUAL
-// ==========================================
-
-const obtenerUsuarioActual = () => {
-  const usuarioGuardado = localStorage.getItem('usuario');
-
-  if (!usuarioGuardado) return null;
-
-  try {
-    return JSON.parse(usuarioGuardado);
-  } catch {
-    return null;
-  }
-};
-
-const obtenerRolActual = (): string => {
-  const usuario = obtenerUsuarioActual();
-  return String(usuario?.rol ?? '').toLowerCase();
-};
-
-const esRecolector = computed(
-  () => obtenerRolActual() === 'recolector'
-);
-
-// ==========================================
 // CARGAR NOTIFICACIONES
 // ==========================================
 
 const cargarNotificaciones = async () => {
+  if (!puedeGestionarSolicitudes.value) {
+    notificaciones.value = [];
+    return;
+  }
+
   const usuarioActual = obtenerUsuarioActual();
 
   if (!usuarioActual?.id) {
@@ -104,28 +172,29 @@ const cargarNotificaciones = async () => {
   }
 
   try {
-    const res = await obtener_bandeja_notificaciones(usuarioActual.id);
+    const res = await obtener_bandeja_notificaciones(
+      usuarioActual.id
+    );
 
     if (res.ok) {
-      notificaciones.value = res.notificaciones;
+      notificaciones.value = res.notificaciones ?? [];
     }
   } catch (error) {
-    console.error('Error al cargar las notificaciones:', error);
+    console.error(
+      'Error al cargar las notificaciones:',
+      error
+    );
   }
 };
 
 // ==========================================
-// ABRIR BANDEJA DE AVISOS
+// BANDEJA DE AVISOS
 // ==========================================
 
 const abrirBandeja = async () => {
   await cargarNotificaciones();
   mostrarAvisos.value = true;
 };
-
-// ==========================================
-// CERRAR BANDEJA
-// ==========================================
 
 const cerrarBandeja = () => {
   mostrarAvisos.value = false;
@@ -139,14 +208,17 @@ const marcarComoLeida = async (notificacion: any) => {
   if (notificacion.leidaEn) return;
 
   try {
-    const res = await marcar_notificacion_leida(notificacion.id);
+    const res = await marcar_notificacion_leida(
+      notificacion.id
+    );
 
     if (res.ok) {
       notificacion.leidaEn = new Date().toISOString();
     } else {
       const alerta = await alertController.create({
         header: 'No se pudo marcar como leída',
-        message: 'El servidor no pudo actualizar la notificación.',
+        message:
+          'El servidor no pudo actualizar la notificación.',
         buttons: ['Aceptar'],
         cssClass: 'alerta-ganica'
       });
@@ -154,11 +226,15 @@ const marcarComoLeida = async (notificacion: any) => {
       await alerta.present();
     }
   } catch (error) {
-    console.error('Error al marcar la notificación como leída:', error);
+    console.error(
+      'Error al marcar la notificación como leída:',
+      error
+    );
 
     const alerta = await alertController.create({
       header: 'No se pudo marcar como leída',
-      message: 'Verificá tu conexión e intentá nuevamente.',
+      message:
+        'Verificá tu conexión e intentá nuevamente.',
       buttons: ['Aceptar'],
       cssClass: 'alerta-ganica'
     });
@@ -169,18 +245,23 @@ const marcarComoLeida = async (notificacion: any) => {
 
 // ==========================================
 // ACTUALIZAR ESTADO DE UNA SOLICITUD
+// La firma del vecino es la que finaliza el retiro.
 // ==========================================
 
 const actualizarEstadoSolicitud = async (
   notificacion: any,
-  estado: 'Observada' | 'En camino' | 'Finalizada'
+  estado: 'Observada' | 'En camino'
 ) => {
   const solicitudId = Number(notificacion.solicitudId);
 
-  if (!Number.isInteger(solicitudId) || solicitudId <= 0) {
+  if (
+    !Number.isInteger(solicitudId) ||
+    solicitudId <= 0
+  ) {
     const alerta = await alertController.create({
       header: 'Solicitud no identificada',
-      message: 'Esta notificación no contiene un identificador válido de solicitud.',
+      message:
+        'Esta notificación no contiene un identificador válido de solicitud.',
       buttons: ['Aceptar'],
       cssClass: 'alerta-ganica'
     });
@@ -190,13 +271,23 @@ const actualizarEstadoSolicitud = async (
   }
 
   if (!notificacion.leidaEn) {
+    const alerta = await alertController.create({
+      header: 'Leé primero el aviso',
+      message:
+        'Marcá la notificación como leída antes de actualizar el estado.',
+      buttons: ['Aceptar'],
+      cssClass: 'alerta-ganica'
+    });
+
+    await alerta.present();
     return;
   }
 
-  if (!esRecolector.value && obtenerRolActual() !== 'administrador') {
+  if (!puedeGestionarSolicitudes.value) {
     const alerta = await alertController.create({
       header: 'Acceso restringido',
-      message: 'No tenés permisos para modificar el estado de la solicitud.',
+      message:
+        'No tenés permisos para modificar el estado de la solicitud.',
       buttons: ['Aceptar'],
       cssClass: 'alerta-ganica'
     });
@@ -214,24 +305,28 @@ const actualizarEstadoSolicitud = async (
   try {
     await actualizar_estado_solicitud_api(solicitudId, {
       estado,
-      observacion: `Estado actualizado a "${estado}" desde la notificación.`
+      observacion:
+        `Estado actualizado a "${estado}" desde la notificación.`
     });
 
     notificacion.estadoSolicitud = estado;
 
     const alerta = await alertController.create({
       header: 'Estado actualizado',
-      message: `La solicitud #${solicitudId} ahora está "${estado}".`,
+      message:
+        `La solicitud #${solicitudId} ahora está "${estado}".`,
       buttons: ['Aceptar'],
       cssClass: 'alerta-ganica'
     });
 
     await alerta.present();
 
-    // Volver a consultar los datos disponibles en el servidor.
     await cargarNotificaciones();
   } catch (error) {
-    console.error('Error al actualizar el estado de la solicitud:', error);
+    console.error(
+      'Error al actualizar el estado de la solicitud:',
+      error
+    );
 
     const alerta = await alertController.create({
       header: 'No se pudo actualizar',
@@ -243,9 +338,10 @@ const actualizarEstadoSolicitud = async (
 
     await alerta.present();
   } finally {
-    estadosActualizando.value = estadosActualizando.value.filter(
-      id => id !== solicitudId
-    );
+    estadosActualizando.value =
+      estadosActualizando.value.filter(
+        id => id !== solicitudId
+      );
   }
 };
 
@@ -253,18 +349,55 @@ const actualizarEstadoSolicitud = async (
 // COMPUTED DE SERVICIOS
 // ==========================================
 
-const cargando = computed(() => servicios_store.cargando);
-const error = computed(() => servicios_store.error);
-const hay_servicios = computed(() => servicios_store.hay_servicios);
-const lista = computed(() => servicios_store.lista);
+const cargando = computed(
+  () => servicios_store.cargando
+);
+
+const error = computed(
+  () => servicios_store.error
+);
+
+const hay_servicios = computed(
+  () => servicios_store.hay_servicios
+);
+
+const lista = computed(
+  () => servicios_store.lista
+);
 
 // ==========================================
-// CANTIDAD DE NOTIFICACIONES SIN LEER
+// NOTIFICACIONES SIN LEER
 // ==========================================
 
 const notificacionesNoLeidas = computed(() => {
-  return notificaciones.value.filter(n => !n.leidaEn).length;
+  return notificaciones.value.filter(
+    n => !n.leidaEn
+  ).length;
 });
+
+// ==========================================
+// NAVEGACIÓN DEL VECINO
+// ==========================================
+
+const irANuevaSolicitud = () => {
+  router.push('/nueva-solicitud');
+};
+
+const irAHistorial = () => {
+  router.push('/historial-solicitudes');
+};
+
+const irAMiCuenta = () => {
+  router.push('/micuenta');
+};
+
+const irAPuntos = () => {
+  router.push('/puntos');
+};
+
+const irASolicitudes = () => {
+  router.push('/solicitudes');
+};
 
 // ==========================================
 // REINTENTAR CARGA DE SERVICIOS
@@ -278,41 +411,16 @@ const reintentar = () => {
 // VALIDACIÓN DE ADMINISTRADOR
 // ==========================================
 
-const verificarPermisoAdministrador = async (): Promise<boolean> => {
-  const usuarioGuardado = localStorage.getItem('usuario');
+const verificarPermisoAdministrador =
+  async (): Promise<boolean> => {
+    const usuarioGuardado =
+      localStorage.getItem('usuario');
 
-  if (!usuarioGuardado) {
-    const alerta = await alertController.create({
-      header: 'Sesión no identificada',
-      message: 'Iniciá sesión para continuar.',
-      buttons: [
-        {
-          text: 'Entendido',
-          role: 'cancel'
-        }
-      ],
-      cssClass: 'alerta-ganica'
-    });
-
-    await alerta.present();
-    return false;
-  }
-
-  try {
-    const parsed = JSON.parse(usuarioGuardado);
-
-    if (parsed.rol !== 'administrador') {
+    if (!usuarioGuardado) {
       const alerta = await alertController.create({
-        header: '🛡️ Acceso restringido',
-        message:
-          'No tenés permisos para administrar los servicios de recolección. Esta acción está reservada para el administrador.',
-        buttons: [
-          {
-            text: 'Entendido',
-            role: 'cancel',
-            cssClass: 'boton-alerta-ganica'
-          }
-        ],
+        header: 'Sesión no identificada',
+        message: 'Iniciá sesión para continuar.',
+        buttons: ['Entendido'],
         cssClass: 'alerta-ganica'
       });
 
@@ -320,26 +428,50 @@ const verificarPermisoAdministrador = async (): Promise<boolean> => {
       return false;
     }
 
-    return true;
-  } catch {
-    const alerta = await alertController.create({
-      header: 'No se pudo verificar tu acceso',
-      message: 'Volvé a iniciar sesión e intentá nuevamente.',
-      buttons: ['Aceptar'],
-      cssClass: 'alerta-ganica'
-    });
+    try {
+      const usuario = JSON.parse(usuarioGuardado);
+      const rol = usuario?.rol;
 
-    await alerta.present();
-    return false;
-  }
-};
+      const rolNormalizado =
+        typeof rol === 'string'
+          ? rol.trim().toLowerCase()
+          : String(rol?.codigo ?? '').trim().toLowerCase();
+
+      if (rolNormalizado !== 'administrador') {
+        const alerta = await alertController.create({
+          header: 'Acceso restringido',
+          message:
+            'La administración de los servicios está reservada para el administrador.',
+          buttons: ['Entendido'],
+          cssClass: 'alerta-ganica'
+        });
+
+        await alerta.present();
+        return false;
+      }
+
+      return true;
+    } catch {
+      const alerta = await alertController.create({
+        header: 'No se pudo verificar tu acceso',
+        message:
+          'Volvé a iniciar sesión e intentá nuevamente.',
+        buttons: ['Aceptar'],
+        cssClass: 'alerta-ganica'
+      });
+
+      await alerta.present();
+      return false;
+    }
+  };
 
 // ==========================================
 // NUEVO SERVICIO
 // ==========================================
 
 const abrirModalNuevo = async () => {
-  const esAdmin = await verificarPermisoAdministrador();
+  const esAdmin =
+    await verificarPermisoAdministrador();
 
   if (!esAdmin) return;
 
@@ -351,8 +483,11 @@ const abrirModalNuevo = async () => {
 // EDITAR SERVICIO
 // ==========================================
 
-const abrirModalEditar = async (servicio: Servicio) => {
-  const esAdmin = await verificarPermisoAdministrador();
+const abrirModalEditar = async (
+  servicio: Servicio
+) => {
+  const esAdmin =
+    await verificarPermisoAdministrador();
 
   if (!esAdmin) return;
 
@@ -364,14 +499,35 @@ const abrirModalEditar = async (servicio: Servicio) => {
 // DAR DE BAJA SERVICIO
 // ==========================================
 
-const darDeBaja = async (id: string | number) => {
-  const esAdmin = await verificarPermisoAdministrador();
+const darDeBaja = async (
+  id: string | number
+) => {
+  const esAdmin =
+    await verificarPermisoAdministrador();
 
   if (!esAdmin) return;
 
-  if (confirm('¿Estás seguro de que querés dar de baja este servicio?')) {
-    await servicios_store.eliminar_servicio(id);
-  }
+  const alerta = await alertController.create({
+    header: 'Dar de baja servicio',
+    message:
+      '¿Estás segura de que querés dar de baja este servicio?',
+    buttons: [
+      {
+        text: 'Cancelar',
+        role: 'cancel'
+      },
+      {
+        text: 'Dar de baja',
+        role: 'destructive',
+        handler: () => {
+          void servicios_store.eliminar_servicio(id);
+        }
+      }
+    ],
+    cssClass: 'alerta-ganica'
+  });
+
+  await alerta.present();
 };
 
 // ==========================================
@@ -380,6 +536,20 @@ const darDeBaja = async (id: string | number) => {
 
 onMounted(() => {
   esOscuro.value = obtenerTemaGuardado();
+
+  actualizarRolSesion();
+
+  window.addEventListener(
+    'sesion-actualizada',
+    actualizarRolSesion
+  );
+});
+
+onUnmounted(() => {
+  window.removeEventListener(
+    'sesion-actualizada',
+    actualizarRolSesion
+  );
 });
 
 // ==========================================
@@ -387,7 +557,16 @@ onMounted(() => {
 // ==========================================
 
 onIonViewWillEnter(async () => {
-  servicios_store.cargar_servicios();
+  actualizarRolSesion();
+
+  esOscuro.value = obtenerTemaGuardado();
+
+  if (!esVecino.value) {
+    await servicios_store.cargar_servicios();
+  } else {
+    notificaciones.value = [];
+  }
+
   await cargarNotificaciones();
 });
 
@@ -409,10 +588,15 @@ const alternarTema = () => {
           <ion-menu-button />
         </ion-buttons>
 
-        <ion-title>Gánica · Servicios</ion-title>
+        <ion-title>
+          Gánica · Inicio
+        </ion-title>
 
         <ion-buttons slot="end">
-          <ion-button @click="alternarTema">
+          <ion-button
+            @click="alternarTema"
+            aria-label="Cambiar tema"
+          >
             <ion-icon
               :icon="esOscuro ? sunnyOutline : moonOutline"
               slot="icon-only"
@@ -423,328 +607,755 @@ const alternarTema = () => {
     </ion-header>
 
     <ion-content class="ion-padding">
-      <!-- BANDEJA DE AVISOS -->
+      <!-- INICIO DEL VECINO -->
+      <section v-if="esVecino" class="bienvenida">
+        <p class="sobrelinea">GESTIÓN DE RECOLECCIÓN</p>
 
-      <ion-card
-        class="tarjeta-bandeja"
-        @click="abrirBandeja"
-      >
-        <ion-item lines="none">
-          <ion-icon
-            :icon="notificationsOutline"
-            slot="start"
-            color="primary"
-          />
+        <h1>¡Hola, {{ nombreUsuario }}!</h1>
 
-          <ion-label>
-            <h3>Bandeja de Avisos</h3>
-            <p>
-              <strong>{{ notificacionesNoLeidas }}</strong>
-              notificaciones sin leer
-            </p>
-          </ion-label>
-        </ion-item>
-      </ion-card>
+        <p class="texto-bienvenida">
+          Desde acá podés solicitar el retiro de residuos
+          y seguir el estado de tus solicitudes.
+        </p>
 
-      <!-- VENTANA DE AVISOS -->
-
-      <div v-if="mostrarAvisos" class="bandeja-avisos">
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>
-              Avisos de Recolección
-            </ion-card-title>
-          </ion-card-header>
-
+        <ion-card class="tarjeta-principal">
           <ion-card-content>
-            <div
-              v-if="notificaciones.length === 0"
-              class="estado-avisos"
-            >
-              <ion-icon
-                :icon="notificationsOutline"
-                class="icono-vacio"
-              />
-
-              <p>No tenés avisos pendientes.</p>
+            <div class="icono-principal">
+              <ion-icon :icon="addCircleOutline" />
             </div>
 
-            <div v-else>
-              <ion-card
-                v-for="notificacion in notificaciones"
-                :key="notificacion.id"
-                class="notificacion-card"
-              >
-                <ion-card-header>
-                  <ion-card-title>
-                    {{ notificacion.titulo }}
-                  </ion-card-title>
-                </ion-card-header>
+            <h2>¿Necesitás un retiro?</h2>
 
-                <ion-card-content>
-                  <p>{{ notificacion.mensaje }}</p>
-
-                  <p
-                    v-if="notificacion.creadoEn"
-                    class="fecha-notificacion"
-                  >
-                    <strong>Recibido:</strong>
-                    {{ new Date(notificacion.creadoEn).toLocaleString() }}
-                  </p>
-
-                  <ion-button
-                    v-if="!notificacion.leidaEn"
-                    size="small"
-                    color="primary"
-                    @click.stop="marcarComoLeida(notificacion)"
-                  >
-                    Marcar como leído
-                  </ion-button>
-
-                  <p
-                    v-else
-                    class="aviso-leido"
-                  >
-                    ✓ Aviso leído
-                  </p>
-
-                  <!-- ESTADOS DE LA SOLICITUD -->
-
-                  <div
-                    v-if="
-                      notificacion.leidaEn &&
-                      notificacion.solicitudId &&
-                      (esRecolector || obtenerRolActual() === 'administrador')
-                    "
-                    class="acciones-solicitud"
-                  >
-                    <p>
-                      <strong>
-                        Solicitud #{{ notificacion.solicitudId }}
-                      </strong>
-                    </p>
-
-                    <p class="estado-actual">
-                      Estado mostrado:
-                      <strong>
-                        {{ notificacion.estadoSolicitud || 'Sin actualizar en esta bandeja' }}
-                      </strong>
-                    </p>
-
-                    <p class="indicacion-estados">
-                      Seleccioná el nuevo estado de la solicitud:
-                    </p>
-
-                    <div class="botones-estados">
-                      <ion-button
-                        size="small"
-                        fill="outline"
-                        color="warning"
-                        :disabled="
-                          estadosActualizando.includes(Number(notificacion.solicitudId)) ||
-                          notificacion.estadoSolicitud === 'Finalizada'
-                        "
-                        @click.stop="actualizarEstadoSolicitud(notificacion, 'Observada')"
-                      >
-                        Observada
-                      </ion-button>
-
-                      <ion-button
-                        size="small"
-                        fill="outline"
-                        color="primary"
-                        :disabled="
-                          estadosActualizando.includes(Number(notificacion.solicitudId)) ||
-                          notificacion.estadoSolicitud === 'Finalizada'
-                        "
-                        @click.stop="actualizarEstadoSolicitud(notificacion, 'En camino')"
-                      >
-                        En camino
-                      </ion-button>
-
-                      <ion-button
-                        size="small"
-                        fill="solid"
-                        color="success"
-                        :disabled="
-                          estadosActualizando.includes(Number(notificacion.solicitudId)) ||
-                          notificacion.estadoSolicitud === 'Finalizada'
-                        "
-                        @click.stop="actualizarEstadoSolicitud(notificacion, 'Finalizada')"
-                      >
-                        Finalizada
-                      </ion-button>
-                    </div>
-                  </div>
-                </ion-card-content>
-              </ion-card>
-            </div>
+            <p>
+              Registrá una solicitud con los datos y la
+              ubicación del retiro.
+            </p>
 
             <ion-button
               expand="block"
-              fill="outline"
-              @click="cerrarBandeja"
+              @click="irANuevaSolicitud"
             >
-              Cerrar bandeja
+              <ion-icon
+                slot="start"
+                :icon="addCircleOutline"
+              />
+              Solicitar retiro
             </ion-button>
           </ion-card-content>
         </ion-card>
-      </div>
 
-      <!-- TÍTULO SERVICIOS -->
+        <h2 class="titulo-seccion">
+          Accesos rápidos
+        </h2>
 
-      <div class="app-portada">
-        <ion-title size="large" class="ion-no-padding">
-          Servicios de Recolección
-        </ion-title>
-      </div>
-
-      <!-- ESTADO CARGANDO -->
-
-      <div v-if="cargando">
-        <ion-card v-for="n in 3" :key="n">
-          <ion-card-header>
-            <ion-card-title>
-              <ion-skeleton-text
-                animated
-                style="width: 60%; height: 20px;"
-              />
-            </ion-card-title>
-          </ion-card-header>
-
-          <ion-card-content>
-            <ion-skeleton-text
-              animated
-              style="width: 90%;"
+        <ion-card
+          class="tarjeta-acceso"
+          button
+          @click="irAHistorial"
+        >
+          <ion-item lines="none">
+            <ion-icon
+              slot="start"
+              :icon="timeOutline"
+              color="primary"
             />
-            <ion-skeleton-text
-              animated
-              style="width: 45%; margin-top: 8px;"
+
+            <ion-label>
+              <h3>Mi historial</h3>
+              <p>
+                Consultá el seguimiento de tus solicitudes.
+              </p>
+            </ion-label>
+
+            <ion-icon
+              slot="end"
+              :icon="timeOutline"
+              color="medium"
             />
-            <ion-skeleton-text
-              animated
-              style="width: 50%; margin-top: 4px;"
-            />
-          </ion-card-content>
+          </ion-item>
         </ion-card>
-      </div>
 
-      <!-- ESTADO ERROR -->
+        <ion-card
+          class="tarjeta-acceso"
+          button
+          @click="irAMiCuenta"
+        >
+          <ion-item lines="none">
+            <ion-icon
+              slot="start"
+              :icon="personOutline"
+              color="primary"
+            />
 
-      <div v-else-if="error" class="estado-contenedor">
+            <ion-label>
+              <h3>Mi cuenta</h3>
+              <p>
+                Consultá los datos de tu perfil.
+              </p>
+            </ion-label>
+
+            <ion-icon
+              slot="end"
+              :icon="personOutline"
+              color="medium"
+            />
+          </ion-item>
+        </ion-card>
+
+        <div class="aviso-conformidad">
+          <ion-icon :icon="alertCircleOutline" />
+
+          <p>
+            Cuando el recolector marque tu solicitud
+            como <strong>En camino</strong>, podrás registrar
+            tu firma de conformidad desde el seguimiento
+            de la solicitud.
+          </p>
+        </div>
+      </section>
+
+      <!-- INICIO DEL ADMINISTRADOR -->
+      <section
+        v-else-if="esAdministrador"
+        class="bienvenida"
+      >
+        <p class="sobrelinea">PANEL DE ADMINISTRACIÓN</p>
+
+        <h1>Bienvenido, {{ nombreUsuario }}</h1>
+
+        <p class="texto-bienvenida">
+          Administrá los servicios de recolección y
+          supervisá las solicitudes recibidas.
+        </p>
+
+        <div class="rejilla-accesos">
+          <ion-card
+            class="tarjeta-acceso"
+            button
+            @click="irASolicitudes"
+          >
+            <ion-card-content>
+              <ion-icon
+                :icon="notificationsOutline"
+                class="icono-acceso"
+              />
+
+              <h3>Solicitudes</h3>
+
+              <p>
+                Revisá y actualizá los estados.
+              </p>
+            </ion-card-content>
+          </ion-card>
+
+          <ion-card
+            class="tarjeta-acceso"
+            button
+            @click="irAPuntos"
+          >
+            <ion-card-content>
+              <ion-icon
+                :icon="locationOutline"
+                class="icono-acceso"
+              />
+
+              <h3>Puntos de retiro</h3>
+
+              <p>
+                Consultá los puntos registrados.
+              </p>
+            </ion-card-content>
+          </ion-card>
+        </div>
+      </section>
+
+      <!-- INICIO DEL RECOLECTOR -->
+      <section
+        v-else-if="esRecolector"
+        class="bienvenida"
+      >
+        <p class="sobrelinea">PANEL DEL RECOLECTOR</p>
+
+        <h1>¡Hola, {{ nombreUsuario }}!</h1>
+
+        <p class="texto-bienvenida">
+          Consultá los avisos recibidos y mantené
+          actualizado el estado de tus solicitudes.
+        </p>
+
+        <div class="rejilla-accesos">
+          <ion-card
+            class="tarjeta-acceso"
+            button
+            @click="irASolicitudes"
+          >
+            <ion-card-content>
+              <ion-icon
+                :icon="notificationsOutline"
+                class="icono-acceso"
+              />
+
+              <h3>Mis solicitudes</h3>
+
+              <p>
+                Revisá los retiros asignados.
+              </p>
+            </ion-card-content>
+          </ion-card>
+
+          <ion-card
+            class="tarjeta-acceso"
+            button
+            @click="irAPuntos"
+          >
+            <ion-card-content>
+              <ion-icon
+                :icon="locationOutline"
+                class="icono-acceso"
+              />
+
+              <h3>Puntos de retiro</h3>
+
+              <p>
+                Consultá los puntos disponibles.
+              </p>
+            </ion-card-content>
+          </ion-card>
+        </div>
+      </section>
+
+      <!-- USUARIO SIN ROL RECONOCIDO -->
+      <section
+        v-else
+        class="estado-contenedor"
+      >
         <ion-icon
           :icon="alertCircleOutline"
           class="icono-error"
         />
 
-        <h2>Error de conexión</h2>
-        <p>{{ error }}</p>
+        <h2>Sesión no identificada</h2>
 
-        <ion-button
-          color="primary"
-          fill="solid"
-          @click="reintentar"
+        <p>
+          No pudimos identificar tu tipo de usuario.
+          Cerrá sesión e ingresá nuevamente.
+        </p>
+      </section>
+
+      <!-- BANDEJA DE AVISOS -->
+      <section v-if="puedeGestionarSolicitudes">
+        <ion-card
+          class="tarjeta-bandeja"
+          button
+          @click="abrirBandeja"
         >
-          REINTENTAR
-        </ion-button>
-      </div>
+          <ion-item lines="none">
+            <ion-icon
+              :icon="notificationsOutline"
+              slot="start"
+              color="primary"
+            />
 
-      <!-- ESTADO VACÍO -->
+            <ion-label>
+              <h3>Bandeja de avisos</h3>
 
-      <div v-else-if="!hay_servicios" class="estado-contenedor">
-        <ion-icon
-          :icon="trashOutline"
-          class="icono-vacio"
-        />
-
-        <p>No hay servicios disponibles en este momento.</p>
-      </div>
-
-      <!-- LISTA DE SERVICIOS -->
-
-      <div v-else>
-        <ion-card v-for="s in lista" :key="s.id">
-          <ion-card-header>
-            <div class="encabezado-servicio">
-              <ion-card-title>
-                {{ s.nombre || s.titulo }}
-              </ion-card-title>
-
-              <div>
-                <ion-button
-                  fill="clear"
-                  size="small"
-                  @click="abrirModalEditar(s)"
-                >
-                  <ion-icon
-                    slot="icon-only"
-                    :icon="createOutline"
-                  />
-                </ion-button>
-
-                <ion-button
-                  fill="clear"
-                  color="danger"
-                  size="small"
-                  @click="darDeBaja(s.id)"
-                >
-                  <ion-icon
-                    slot="icon-only"
-                    :icon="trashBinOutline"
-                  />
-                </ion-button>
-              </div>
-            </div>
-          </ion-card-header>
-
-          <ion-card-content>
-            <p>{{ s.descripcion || s.detalle }}</p>
-
-            <p v-if="s.dias" class="detalle-servicio">
-              <strong>Días:</strong> {{ s.dias }}
-            </p>
-
-            <p v-if="s.horario">
-              <strong>Horario:</strong> {{ s.horario }}
-            </p>
-          </ion-card-content>
+              <p>
+                <strong>
+                  {{ notificacionesNoLeidas }}
+                </strong>
+                notificaciones sin leer
+              </p>
+            </ion-label>
+          </ion-item>
         </ion-card>
-      </div>
 
-      <!-- BOTÓN AGREGAR SERVICIO -->
-
-      <ion-fab
-        vertical="bottom"
-        horizontal="end"
-        slot="fixed"
-      >
-        <ion-fab-button
-          color="primary"
-          @click="abrirModalNuevo"
+        <!-- VENTANA DE AVISOS -->
+        <div
+          v-if="mostrarAvisos"
+          class="bandeja-avisos"
         >
-          <ion-icon :icon="addOutline" />
-        </ion-fab-button>
-      </ion-fab>
+          <ion-card>
+            <ion-card-header>
+              <ion-card-title>
+                Avisos de recolección
+              </ion-card-title>
+            </ion-card-header>
 
-      <!-- MODAL DE SERVICIOS -->
+            <ion-card-content>
+              <div
+                v-if="notificaciones.length === 0"
+                class="estado-avisos"
+              >
+                <ion-icon
+                  :icon="notificationsOutline"
+                  class="icono-vacio"
+                />
 
-      <ModalServicio
-        :abierto="modalAbierto"
-        :servicioEditar="servicioAEditar"
-        @cerrar="modalAbierto = false"
-      />
+                <p>
+                  No hay notificaciones para mostrar.
+                </p>
+              </div>
+
+              <div v-else>
+                <ion-card
+                  v-for="notificacion in notificaciones"
+                  :key="notificacion.id"
+                  class="notificacion-card"
+                >
+                  <ion-card-header>
+                    <ion-card-title>
+                      {{ notificacion.titulo }}
+                    </ion-card-title>
+                  </ion-card-header>
+
+                  <ion-card-content>
+                    <p>{{ notificacion.mensaje }}</p>
+
+                    <p
+                      v-if="notificacion.creadoEn"
+                      class="fecha-notificacion"
+                    >
+                      <strong>Recibido:</strong>
+                      {{
+                        new Date(
+                          notificacion.creadoEn
+                        ).toLocaleString()
+                      }}
+                    </p>
+
+                    <ion-button
+                      v-if="!notificacion.leidaEn"
+                      size="small"
+                      color="primary"
+                      @click.stop="
+                        marcarComoLeida(notificacion)
+                      "
+                    >
+                      Marcar como leído
+                    </ion-button>
+
+                    <p
+                      v-else
+                      class="aviso-leido"
+                    >
+                      ✓ Aviso leído
+                    </p>
+
+                    <!-- ESTADOS DE LA SOLICITUD -->
+                    <div
+                      v-if="
+                        notificacion.leidaEn &&
+                        notificacion.solicitudId
+                      "
+                      class="acciones-solicitud"
+                    >
+                      <p>
+                        <strong>
+                          Solicitud #{{ notificacion.solicitudId }}
+                        </strong>
+                      </p>
+
+                      <p class="estado-actual">
+                        Estado mostrado:
+                        <strong>
+                          {{
+                            notificacion.estadoSolicitud ||
+                            'Consultar solicitud'
+                          }}
+                        </strong>
+                      </p>
+
+                      <template
+                        v-if="
+                          notificacion.estadoSolicitud !==
+                          'Finalizada'
+                        "
+                      >
+                        <p class="indicacion-estados">
+                          Seleccioná el nuevo estado:
+                        </p>
+
+                        <div class="botones-estados">
+                          <ion-button
+                            size="small"
+                            fill="outline"
+                            color="warning"
+                            :disabled="
+                              estadosActualizando.includes(
+                                Number(
+                                  notificacion.solicitudId
+                                )
+                              )
+                            "
+                            @click.stop="
+                              actualizarEstadoSolicitud(
+                                notificacion,
+                                'Observada'
+                              )
+                            "
+                          >
+                            Observada
+                          </ion-button>
+
+                          <ion-button
+                            size="small"
+                            fill="outline"
+                            color="primary"
+                            :disabled="
+                              estadosActualizando.includes(
+                                Number(
+                                  notificacion.solicitudId
+                                )
+                              )
+                            "
+                            @click.stop="
+                              actualizarEstadoSolicitud(
+                                notificacion,
+                                'En camino'
+                              )
+                            "
+                          >
+                            En camino
+                          </ion-button>
+                        </div>
+                      </template>
+
+                      <p
+                        v-else
+                        class="aviso-leido"
+                      >
+                        Esta solicitud ya fue finalizada.
+                      </p>
+                    </div>
+                  </ion-card-content>
+                </ion-card>
+              </div>
+
+              <ion-button
+                expand="block"
+                fill="outline"
+                @click="cerrarBandeja"
+              >
+                Cerrar bandeja
+              </ion-button>
+            </ion-card-content>
+          </ion-card>
+        </div>
+      </section>
+
+      <!-- SERVICIOS DE RECOLECCIÓN -->
+      <section
+        v-if="!esVecino && (esAdministrador || esRecolector)"
+      >
+        <div class="app-portada">
+          <h2 class="titulo-seccion">
+            Servicios de recolección
+          </h2>
+
+          <p v-if="esAdministrador">
+            Administrá los servicios disponibles.
+          </p>
+
+          <p v-else>
+            Consultá los servicios y sus horarios.
+          </p>
+        </div>
+
+        <!-- CARGANDO -->
+        <div v-if="cargando">
+          <ion-card
+            v-for="n in 3"
+            :key="n"
+          >
+            <ion-card-header>
+              <ion-card-title>
+                <ion-skeleton-text
+                  animated
+                  style="width: 60%; height: 20px;"
+                />
+              </ion-card-title>
+            </ion-card-header>
+
+            <ion-card-content>
+              <ion-skeleton-text
+                animated
+                style="width: 90%;"
+              />
+
+              <ion-skeleton-text
+                animated
+                style="width: 45%; margin-top: 8px;"
+              />
+
+              <ion-skeleton-text
+                animated
+                style="width: 50%; margin-top: 4px;"
+              />
+            </ion-card-content>
+          </ion-card>
+        </div>
+
+        <!-- ERROR -->
+        <div
+          v-else-if="error"
+          class="estado-contenedor"
+        >
+          <ion-icon
+            :icon="alertCircleOutline"
+            class="icono-error"
+          />
+
+          <h2>Error de conexión</h2>
+
+          <p>{{ error }}</p>
+
+          <ion-button
+            color="primary"
+            @click="reintentar"
+          >
+            Reintentar
+          </ion-button>
+        </div>
+
+        <!-- SIN SERVICIOS -->
+        <div
+          v-else-if="!hay_servicios"
+          class="estado-contenedor"
+        >
+          <ion-icon
+            :icon="trashOutline"
+            class="icono-vacio"
+          />
+
+          <p>
+            No hay servicios disponibles en este momento.
+          </p>
+        </div>
+
+        <!-- LISTA DE SERVICIOS -->
+        <div v-else>
+          <ion-card
+            v-for="s in lista"
+            :key="s.id"
+          >
+            <ion-card-header>
+              <div class="encabezado-servicio">
+                <ion-card-title>
+                  {{ s.nombre || s.titulo }}
+                </ion-card-title>
+
+                <!-- Acciones exclusivas del administrador -->
+                <div v-if="esAdministrador">
+                  <ion-button
+                    fill="clear"
+                    size="small"
+                    aria-label="Editar servicio"
+                    @click="abrirModalEditar(s)"
+                  >
+                    <ion-icon
+                      slot="icon-only"
+                      :icon="createOutline"
+                    />
+                  </ion-button>
+
+                  <ion-button
+                    fill="clear"
+                    color="danger"
+                    size="small"
+                    aria-label="Dar de baja servicio"
+                    @click="darDeBaja(s.id)"
+                  >
+                    <ion-icon
+                      slot="icon-only"
+                      :icon="trashBinOutline"
+                    />
+                  </ion-button>
+                </div>
+              </div>
+            </ion-card-header>
+
+            <ion-card-content>
+              <p>
+                {{ s.descripcion || s.detalle }}
+              </p>
+
+              <p
+                v-if="s.dias"
+                class="detalle-servicio"
+              >
+                <strong>Días:</strong> {{ s.dias }}
+              </p>
+
+              <p v-if="s.horario">
+                <strong>Horario:</strong> {{ s.horario }}
+              </p>
+            </ion-card-content>
+          </ion-card>
+        </div>
+
+        <!-- AGREGAR SERVICIO: SOLO ADMINISTRADOR -->
+        <ion-fab
+          v-if="esAdministrador"
+          vertical="bottom"
+          horizontal="end"
+          slot="fixed"
+        >
+          <ion-fab-button
+            color="primary"
+            @click="abrirModalNuevo"
+          >
+            <ion-icon :icon="addOutline" />
+          </ion-fab-button>
+        </ion-fab>
+
+        <!-- MODAL DE SERVICIOS -->
+        <ModalServicio
+          :abierto="modalAbierto"
+          :servicioEditar="servicioAEditar"
+          @cerrar="modalAbierto = false"
+        />
+      </section>
     </ion-content>
   </ion-page>
 </template>
 
 <style scoped>
+.bienvenida {
+  margin-bottom: 24px;
+}
+
+.sobrelinea {
+  margin-bottom: 8px;
+  color: var(--ion-color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.bienvenida h1 {
+  margin-top: 4px;
+  margin-bottom: 10px;
+  font-size: 1.65rem;
+  font-weight: 750;
+}
+
+.texto-bienvenida {
+  color: var(--ion-color-medium);
+  line-height: 1.6;
+}
+
+.tarjeta-principal {
+  margin: 20px 0;
+  border-radius: 18px;
+}
+
+.tarjeta-principal ion-card-content {
+  padding: 22px;
+}
+
+.icono-principal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: var(--ion-color-primary);
+  color: var(--ion-color-primary-contrast);
+  font-size: 28px;
+}
+
+.tarjeta-principal h2 {
+  margin-top: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.tarjeta-principal p {
+  color: var(--ion-color-medium);
+  line-height: 1.5;
+}
+
+.tarjeta-principal ion-button {
+  margin-top: 18px;
+}
+
+.titulo-seccion {
+  margin: 24px 0 8px;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.rejilla-accesos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.rejilla-accesos ion-card {
+  margin: 0;
+}
+
+.tarjeta-acceso {
+  border-radius: 14px;
+}
+
+.tarjeta-acceso ion-card-content {
+  padding: 16px;
+}
+
+.tarjeta-acceso h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.tarjeta-acceso p {
+  color: var(--ion-color-medium);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.icono-acceso {
+  font-size: 28px;
+  color: var(--ion-color-primary);
+}
+
+.aviso-conformidad {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--ion-color-light);
+}
+
+.aviso-conformidad ion-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--ion-color-primary);
+  font-size: 22px;
+}
+
+.aviso-conformidad p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
 .app-portada {
-  margin-bottom: 1rem;
+  margin: 24px 0 12px;
+}
+
+.app-portada p {
+  color: var(--ion-color-medium);
 }
 
 .tarjeta-bandeja {
   margin-bottom: 20px;
-  cursor: pointer;
+  border-radius: 14px;
 }
 
 .bandeja-avisos {
@@ -753,6 +1364,7 @@ const alternarTema = () => {
 
 .notificacion-card {
   margin-top: 12px;
+  border-radius: 12px;
 }
 
 .fecha-notificacion {
@@ -777,6 +1389,7 @@ const alternarTema = () => {
 .estado-actual,
 .indicacion-estados {
   margin-top: 8px;
+  line-height: 1.5;
 }
 
 .botones-estados {
@@ -791,15 +1404,19 @@ const alternarTema = () => {
 }
 
 .estado-avisos {
-  text-align: center;
   padding: 20px;
+  text-align: center;
 }
 
 .encabezado-servicio {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+}
+
+.encabezado-servicio ion-card-title {
+  flex: 1;
 }
 
 .detalle-servicio {
@@ -811,9 +1428,9 @@ const alternarTema = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12px;
   padding: 40px 20px;
   text-align: center;
-  gap: 12px;
 }
 
 .icono-error {
@@ -826,8 +1443,7 @@ const alternarTema = () => {
   color: var(--ion-color-medium);
 }
 
-/* Alertas de permisos de GANICA */
-
+/* Alertas de GANICA */
 :global(.alerta-ganica .alert-wrapper) {
   border-radius: 20px;
   --background: var(--ion-background-color, #ffffff);
@@ -854,5 +1470,11 @@ const alternarTema = () => {
 :global(.alerta-ganica .alert-button) {
   font-weight: 700;
   text-transform: none;
+}
+
+@media (max-width: 360px) {
+  .rejilla-accesos {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

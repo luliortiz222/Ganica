@@ -366,6 +366,12 @@ namespace GanicaApi.Migrations
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("FirmaConformidadArchivo")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTimeOffset?>("FirmaConformidadFecha")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<double?>("Latitud")
                         .HasColumnType("double");
 

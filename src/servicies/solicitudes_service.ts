@@ -1,3 +1,4 @@
+
 import { ajax_request } from "./ajax_service";
 
 export interface CrearSolicitud {
@@ -19,8 +20,11 @@ export interface SolicitudApi {
   estado: string;
   latitud?: number | null;
   longitud?: number | null;
-}
 
+  // Datos de la firma de conformidad
+  firmaConformidadArchivo?: string | null;
+  firmaConformidadFecha?: string | null;
+}
 
 export interface HistorialSolicitudApi {
   id: number;
@@ -36,6 +40,11 @@ export interface HistorialSolicitudApi {
   direccion: string | null;
 }
 
+export interface ActualizarEstadoSolicitud {
+  estado: string;
+  observacion?: string;
+}
+
 export async function listar_historial_solicitudes_api():
   Promise<HistorialSolicitudApi[]> {
   return await ajax_request<HistorialSolicitudApi[]>(
@@ -44,12 +53,6 @@ export async function listar_historial_solicitudes_api():
       method: "GET"
     }
   );
-}
-
-
-export interface ActualizarEstadoSolicitud {
-  estado: string;
-  observacion?: string;
 }
 
 export async function crear_solicitud_api(
@@ -77,4 +80,3 @@ export async function actualizar_estado_solicitud_api(
     body: JSON.stringify(datos)
   });
 }
-

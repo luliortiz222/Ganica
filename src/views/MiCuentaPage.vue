@@ -11,19 +11,14 @@
     </ion-header>
 
     <ion-content class="ion-padding">
-
       <h2 class="app-titulo-ganica">
         Portal de Autenticación
       </h2>
 
       <!-- USUARIO NO AUTENTICADO -->
-
       <ion-card v-if="!autenticado">
-
         <!-- FORMULARIO DE LOGIN -->
-
         <template v-if="!modoRegistro">
-
           <ion-card-header>
             <ion-card-title>
               Iniciar Sesión
@@ -35,11 +30,8 @@
           </ion-card-header>
 
           <ion-card-content>
-
             <form @submit.prevent="handle">
-
               <ion-list lines="full">
-
                 <ion-item>
                   <ion-input
                     v-model="credenciales.email"
@@ -61,7 +53,6 @@
                     required
                   />
                 </ion-item>
-
               </ion-list>
 
               <ion-button
@@ -72,16 +63,10 @@
               >
                 Ingresar
               </ion-button>
-
             </form>
 
-            <!-- ENTRAR AL REGISTRO -->
-
             <div class="ion-text-center ion-margin-top">
-
-              <p>
-                ¿No tenés una cuenta?
-              </p>
+              <p>¿No tenés una cuenta?</p>
 
               <ion-button
                 fill="clear"
@@ -90,19 +75,13 @@
               >
                 Registrate
               </ion-button>
-
             </div>
-
           </ion-card-content>
-
         </template>
 
         <!-- FORMULARIO DE REGISTRO -->
-
         <template v-else>
-
           <ion-card-header>
-
             <ion-card-title>
               Crear una cuenta
             </ion-card-title>
@@ -110,18 +89,11 @@
             <ion-card-subtitle>
               Registrate para utilizar Ganica
             </ion-card-subtitle>
-
           </ion-card-header>
 
-
           <ion-card-content>
-
             <form @submit.prevent="registrar">
-
               <ion-list lines="full">
-
-                <!-- EMAIL -->
-
                 <ion-item>
                   <ion-input
                     v-model="registro.email"
@@ -132,9 +104,6 @@
                     required
                   />
                 </ion-item>
-
-
-                <!-- CONTRASEÑA -->
 
                 <ion-item>
                   <ion-input
@@ -147,9 +116,6 @@
                   />
                 </ion-item>
 
-
-                <!-- CONFIRMAR CONTRASEÑA -->
-
                 <ion-item>
                   <ion-input
                     v-model="registro.confirmarPassword"
@@ -160,11 +126,7 @@
                     required
                   />
                 </ion-item>
-
               </ion-list>
-
-
-              <!-- BOTÓN REGISTRARSE -->
 
               <ion-button
                 expand="block"
@@ -174,17 +136,10 @@
               >
                 Registrarse
               </ion-button>
-
             </form>
 
-
-            <!-- VOLVER AL LOGIN -->
-
             <div class="ion-text-center ion-margin-top">
-
-              <p>
-                ¿Ya tenés una cuenta?
-              </p>
+              <p>¿Ya tenés una cuenta?</p>
 
               <ion-button
                 fill="clear"
@@ -193,41 +148,28 @@
               >
                 Iniciar sesión
               </ion-button>
-
             </div>
-
           </ion-card-content>
-
         </template>
-
       </ion-card>
 
-
       <!-- USUARIO AUTENTICADO -->
-
       <ion-card v-else>
-
         <ion-card-header>
-
           <ion-card-title>
             {{ usuarioInfo.email }}
           </ion-card-title>
 
           <ion-card-subtitle>
             Rol en el sistema:
-
             <strong>
               {{ usuarioInfo.rol || 'Sin rol asignado' }}
             </strong>
           </ion-card-subtitle>
-
         </ion-card-header>
 
-
         <ion-card-content>
-
           <!-- CUENTA SIN ROL -->
-
           <div
             v-if="!usuarioInfo.rol"
             class="ion-padding-bottom"
@@ -238,97 +180,67 @@
             </p>
           </div>
 
-
           <!-- DATOS DEL PERFIL -->
-
           <ion-list lines="full">
-
             <ion-item>
-
               <ion-input
                 v-model="perfil.nombre"
                 label="Nombre completo"
                 label-placement="stacked"
               />
-
             </ion-item>
 
-
             <ion-item>
-
               <ion-input
                 v-model="perfil.direccion"
                 label="Dirección principal"
                 label-placement="stacked"
               />
-
             </ion-item>
-
 
             <!-- NOTIFICACIONES -->
-
             <ion-item>
-
-              <ion-toggle
-                v-model="perfil.notificaciones"
-              >
+              <ion-toggle v-model="perfil.notificaciones">
                 Recibir alertas de recolección
               </ion-toggle>
-
             </ion-item>
 
-
             <!-- MODO OSCURO -->
-
             <ion-item>
-
               <ion-toggle
                 :checked="esOscuro"
                 @ionChange="alternarTema"
               >
                 Modo Oscuro
               </ion-toggle>
-
             </ion-item>
 
-
             <!-- VIBRACIÓN -->
-
             <ion-item>
-
               <ion-toggle
                 :checked="vibracionActiva"
                 @ionChange="cambiarVibracion"
               >
                 Vibración háptica al tacto
               </ion-toggle>
-
             </ion-item>
-
           </ion-list>
 
-
           <!-- GUARDAR PERFIL -->
-
           <ion-button
             expand="block"
             color="success"
             class="ion-margin-top"
             @click="guardarPerfil"
           >
-
             <ion-icon
               :icon="saveOutline"
               slot="start"
             />
-
             Guardar Cambios
-
           </ion-button>
 
-
           <!-- CERRAR SESIÓN -->
-
           <ion-button
             expand="block"
             color="danger"
@@ -337,24 +249,18 @@
           >
             Cerrar Sesión
           </ion-button>
-
         </ion-card-content>
-
       </ion-card>
-
     </ion-content>
   </ion-page>
 </template>
 
-
 <script setup lang="ts">
-
 import {
   ref,
   computed,
   onMounted
 } from 'vue';
-
 
 import {
   IonPage,
@@ -378,44 +284,32 @@ import {
   toastController
 } from '@ionic/vue';
 
-
 import { saveOutline } from 'ionicons/icons';
-
 
 import {
   obtenerTemaGuardado,
   aplicarTema
 } from '@/config/tema';
 
-
 import {
   authService
 } from '@/servicies/auth_service';
-
 
 import {
   vibrar_toque
 } from '@/servicies/vibracion_service';
 
-
 import {
   use_tema_store
 } from '../stores/tema_store';
 
-
 /* VIBRACIÓN */
-
 const vibracionActiva = computed(() => {
-
   const temaStore = use_tema_store();
-
   return temaStore.vibracion_activa;
-
 });
 
-
-const cambiarVibracion = (event: CustomEvent) => {
-
+const cambiarVibracion = (_event: CustomEvent) => {
   const temaStore = use_tema_store();
 
   temaStore.alternar_vibracion();
@@ -423,451 +317,297 @@ const cambiarVibracion = (event: CustomEvent) => {
   if (temaStore.vibracion_activa) {
     vibrar_toque();
   }
-
 };
 
-
-/* Variables generales */
-
+/* VARIABLES GENERALES */
 const PERFIL_KEY = 'ganica_perfil_usuario';
 
 const esOscuro = ref(false);
-
 const autenticado = ref(false);
-
 const modoRegistro = ref(false);
 
-
 /* CREDENCIALES LOGIN */
-
 const credenciales = ref({
-
   email: '',
-
   password: ''
-
 });
-
 
 /* DATOS REGISTRO */
-
 const registro = ref({
-
   email: '',
-
   password: '',
-
   confirmarPassword: ''
-
 });
-
 
 /* INFORMACIÓN DEL USUARIO */
-
 const usuarioInfo = ref({
-
   email: '',
-
   rol: ''
-
 });
-
 
 /* PERFIL LOCAL */
-
 const perfil = ref({
-
   nombre: '',
-
   direccion: '',
-
   notificaciones: true
-
 });
-
 
 const esSinRol = ref(false);
 
+/* AVISAR QUE CAMBIÓ LA SESIÓN */
+const notificarCambioSesion = () => {
+  window.dispatchEvent(
+    new Event('sesion-actualizada')
+  );
+};
+
 /* AL INICIAR LA VISTA */
-
-
 onMounted(() => {
-
   esOscuro.value = obtenerTemaGuardado();
 
   verificarSesion();
 
-
-  const guardado =
-    localStorage.getItem(PERFIL_KEY);
-
+  const guardado = localStorage.getItem(PERFIL_KEY);
 
   if (guardado) {
-
-    perfil.value =
-      JSON.parse(guardado);
-
+    try {
+      perfil.value = JSON.parse(guardado);
+    } catch (error) {
+      console.error(
+        'No se pudo cargar el perfil guardado:',
+        error
+      );
+    }
   }
-
 });
 
 /* VERIFICAR SESIÓN */
-
 const verificarSesion = () => {
-
-  autenticado.value =
-    authService.estaAutenticado();
-
+  autenticado.value = authService.estaAutenticado();
 
   if (autenticado.value) {
-
-    const userStr =
-      localStorage.getItem('usuario');
-
+    const userStr = localStorage.getItem('usuario');
 
     if (userStr) {
-
       try {
+        const usuario = JSON.parse(userStr);
 
-        usuarioInfo.value =
-          JSON.parse(userStr);
-
+        usuarioInfo.value = {
+          email: String(
+            usuario?.email ??
+            usuario?.Email ??
+            ''
+          ),
+          rol: String(
+            typeof usuario?.rol === 'object'
+              ? usuario.rol?.codigo ?? ''
+              : usuario?.rol ?? ''
+          ).trim().toLowerCase()
+        };
 
         esSinRol.value =
           !usuarioInfo.value.rol ||
-          usuarioInfo.value.rol ===
-            'Sin rol asignado';
-
+          usuarioInfo.value.rol === 'sin rol asignado';
 
         if (!perfil.value.nombre) {
-
           perfil.value.nombre =
+            usuario?.nombre ??
+            usuario?.Nombre ??
             usuarioInfo.value.email;
-
         }
-
-      } catch (e) {
+      } catch (error) {
+        console.error(
+          'No se pudo leer la información de la sesión:',
+          error
+        );
 
         usuarioInfo.value = {
-
           email: '',
-
           rol: ''
-
         };
 
+        esSinRol.value = true;
       }
+    } else {
+      usuarioInfo.value = {
+        email: '',
+        rol: ''
+      };
 
+      esSinRol.value = true;
     }
+  } else {
+    usuarioInfo.value = {
+      email: '',
+      rol: ''
+    };
 
+    esSinRol.value = false;
   }
-
 };
-
 
 /* MOSTRAR REGISTRO */
 const mostrarRegistro = () => {
-
   modoRegistro.value = true;
 
-
   registro.value = {
-
     email: '',
-
     password: '',
-
     confirmarPassword: ''
-
   };
-
 };
-
 
 /* VOLVER AL LOGIN */
-
 const mostrarLogin = () => {
-
   modoRegistro.value = false;
 
-
   registro.value = {
-
     email: '',
-
     password: '',
-
     confirmarPassword: ''
-
   };
-
 };
 
-
 /* INICIAR SESIÓN */
-
 const handle = async () => {
-
   try {
-
-    await authService.login(
-      credenciales.value
-    );
-
+    await authService.login(credenciales.value);
 
     verificarSesion();
 
+    // Actualizar el rol y las rutas de toda la aplicación.
+    notificarCambioSesion();
 
-    const toast =
-      await toastController.create({
-
-        message:
-          '¡Inicio de sesión exitoso!',
-
-        duration: 2000,
-
-        color: 'success',
-
-        position: 'bottom'
-
-      });
-
+    const toast = await toastController.create({
+      message: '¡Inicio de sesión exitoso!',
+      duration: 2000,
+      color: 'success',
+      position: 'bottom'
+    });
 
     await toast.present();
-
-
   } catch (error) {
+    console.error('Error al iniciar sesión:', error);
 
-    const toast =
-      await toastController.create({
-
-        message:
-          'Error al iniciar sesión. Verifique sus credenciales.',
-
-        duration: 2500,
-
-        color: 'danger',
-
-        position: 'bottom'
-
-      });
-
+    const toast = await toastController.create({
+      message:
+        'Error al iniciar sesión. Verifique sus credenciales.',
+      duration: 2500,
+      color: 'danger',
+      position: 'bottom'
+    });
 
     await toast.present();
-
   }
-
 };
 
-
 /* REGISTRAR USUARIO */
-
 const registrar = async () => {
-  /* Verificar contraseña*/
-
   if (
     registro.value.password !==
     registro.value.confirmarPassword
   ) {
-
-    const toast =
-      await toastController.create({
-
-        message:
-          'Las contraseñas no coinciden.',
-
-        duration: 2500,
-
-        color: 'warning',
-
-        position: 'bottom'
-
-      });
-
-
-    await toast.present();
-
-    return;
-
-  }
-
-
-  /* Longitud minima */
-
-  if (
-    registro.value.password.length < 6
-  ) {
-
-    const toast =
-      await toastController.create({
-
-        message:
-          'La contraseña debe tener al menos 6 caracteres.',
-
-        duration: 2500,
-
-        color: 'warning',
-
-        position: 'bottom'
-
-      });
-
-
-    await toast.present();
-
-    return;
-
-  }
-
-
-  /* Enviar registro */
-
-  try {
-
-    await authService.registrar({
-
-      email:
-        registro.value.email,
-
-      password:
-        registro.value.password
-
+    const toast = await toastController.create({
+      message: 'Las contraseñas no coinciden.',
+      duration: 2500,
+      color: 'warning',
+      position: 'bottom'
     });
 
+    await toast.present();
+    return;
+  }
 
-    const toast =
-      await toastController.create({
-
-        message:
-          '¡Cuenta creada correctamente! Ahora podés iniciar sesión.',
-
-        duration: 3000,
-
-        color: 'success',
-
-        position: 'bottom'
-
-      });
-
+  if (registro.value.password.length < 6) {
+    const toast = await toastController.create({
+      message:
+        'La contraseña debe tener al menos 6 caracteres.',
+      duration: 2500,
+      color: 'warning',
+      position: 'bottom'
+    });
 
     await toast.present();
+    return;
+  }
 
+  try {
+    await authService.registrar({
+      email: registro.value.email,
+      password: registro.value.password
+    });
 
-    /* Volver al login */
+    const toast = await toastController.create({
+      message:
+        '¡Cuenta creada correctamente! Ahora podés iniciar sesión.',
+      duration: 3000,
+      color: 'success',
+      position: 'bottom'
+    });
+
+    await toast.present();
 
     modoRegistro.value = false;
 
-
-    /* Limpiar formulario */
-
     registro.value = {
-
       email: '',
-
       password: '',
-
       confirmarPassword: ''
-
     };
-
-
   } catch (error) {
+    const mensaje = error instanceof Error
+      ? error.message
+      : 'No se pudo crear la cuenta.';
 
-    const mensaje =
-      error instanceof Error
-        ? error.message
-        : 'No se pudo crear la cuenta.';
-
-
-    const toast =
-      await toastController.create({
-
-        message: mensaje,
-
-        duration: 3000,
-
-        color: 'danger',
-
-        position: 'bottom'
-
-      });
-
+    const toast = await toastController.create({
+      message: mensaje,
+      duration: 3000,
+      color: 'danger',
+      position: 'bottom'
+    });
 
     await toast.present();
-
   }
-
 };
 
-/* Cerrar sesion */
-
-
+/* CERRAR SESIÓN */
 const cerrarSesion = () => {
-
   authService.logout();
-
 
   autenticado.value = false;
 
-
   usuarioInfo.value = {
-
     email: '',
-
     rol: ''
-
   };
 
+  esSinRol.value = false;
+
+  // Actualizar el menú y la página de inicio.
+  notificarCambioSesion();
 };
 
-/* Cambiar tema */
+/* CAMBIAR TEMA */
+const alternarTema = (event: CustomEvent) => {
+  esOscuro.value = event.detail.checked;
 
-const alternarTema = (
-  event: CustomEvent
-) => {
-
-  esOscuro.value =
-    event.detail.checked;
-
-
-  aplicarTema(
-    esOscuro.value
-  );
-
+  aplicarTema(esOscuro.value);
 };
 
-/* Guardar Perfil */
-
+/* GUARDAR PERFIL */
 const guardarPerfil = async () => {
-
   localStorage.setItem(
-
     PERFIL_KEY,
-
-    JSON.stringify(
-      perfil.value
-    )
-
+    JSON.stringify(perfil.value)
   );
 
-
-  const toast =
-    await toastController.create({
-
-      message:
-        'Perfil actualizado con éxito',
-
-      duration: 2000,
-
-      color: 'success',
-
-      position: 'bottom'
-
-    });
-
+  const toast = await toastController.create({
+    message: 'Perfil actualizado con éxito',
+    duration: 2000,
+    color: 'success',
+    position: 'bottom'
+  });
 
   await toast.present();
-
 };
-
 </script>

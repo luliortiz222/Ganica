@@ -1,9 +1,11 @@
 
+
 <template>
   <ion-page>
     <ion-header>
       <ion-toolbar>
         <ion-title>Historial de solicitudes</ion-title>
+
         <ion-buttons slot="end">
           <ion-button
             @click="cargarHistorial"
@@ -100,7 +102,7 @@
           :value="String(grupo.solicitudId)"
           class="grupo-solicitud"
         >
-          <!-- Encabezado siempre visible -->
+          <!-- Encabezado de la solicitud -->
           <ion-item
             slot="header"
             lines="none"
@@ -140,7 +142,7 @@
             </ion-badge>
           </ion-item>
 
-          <!-- Detalles que se abren al tocar la solicitud -->
+          <!-- Detalles de trazabilidad -->
           <div slot="content" class="contenido-desplegable">
             <div class="timeline">
               <div
@@ -199,9 +201,65 @@
                 </div>
               </div>
             </div>
+
+            <!-- Firma disponible únicamente para el vecino -->
+            <div
+              v-if="
+                esVecino &&
+                normalizarEstado(grupo.estadoActual) === 'en camino' &&
+                !grupo.tieneFirma
+              "
+              class="panel-firma"
+            >
+              <div class="panel-firma-icono">
+                <ion-icon :icon="createOutline" />
+              </div>
+
+              <div class="panel-firma-texto">
+                <h3>Confirmar recepción del servicio</h3>
+                <p>
+                  Si el recolector llegó y realizó el retiro,
+                  registrá tu firma de conformidad para finalizar
+                  la solicitud.
+                </p>
+              </div>
+
+              <ion-button
+                expand="block"
+                color="success"
+                @click="abrirFirma(grupo)"
+              >
+                <ion-icon slot="start" :icon="createOutline" />
+                Registrar mi firma
+              </ion-button>
+            </div>
+
+            <!-- Confirmación visual cuando el historial registra la firma -->
+            <div
+              v-if="esVecino && grupo.tieneFirma"
+              class="firma-registrada"
+            >
+              <ion-icon :icon="checkmarkCircleOutline" />
+              <div>
+                <strong>Conformidad registrada</strong>
+                <p>La firma de recepción figura en la trazabilidad.</p>
+              </div>
+            </div>
           </div>
         </ion-accordion>
       </ion-accordion-group>
+
+      
+<FirmaConformidad
+  v-if="solicitudParaFirma"
+  :abierto="firmaAbierta"
+  :solicitud-id="solicitudParaFirma.solicitudId"
+  :direccion="solicitudParaFirma.direccion || ''"
+  :tipo-residuo="solicitudParaFirma.tipoResiduo || ''"
+  @cerrar="cerrarFirma"
+  @finalizada="alFinalizarFirma"
+/>
+
     </ion-content>
   </ion-page>
 </template>
@@ -243,19 +301,39 @@ import {
   documentTextOutline
 } from 'ionicons/icons';
 
+import FirmaConformidad from '@/components/FirmaConformidad.vue';
+
 import {
   listar_historial_solicitudes_api,
   type HistorialSolicitudApi
 } from '@/servicies/solicitudes_service';
 
+interface GrupoSolicitud {
+  solicitudId: number;
+  tipoResiduo: string | null;
+  direccion: string | null;
+  estadoActual: string | null;
+  eventos: HistorialSolicitudApi[];
+  tieneFirma: boolean;
+}
+
+interface SolicitudParaFirma {
+  solicitudId: number;
+  direccion: string | null;
+  tipoResiduo: string | null;
+}
+
 const historial = ref<HistorialSolicitudApi[]>([]);
 const cargando = ref(false);
 const error = ref('');
 
+const firmaAbierta = ref(false);
+const solicitudParaFirma = ref<SolicitudParaFirma | null>(null);
+
 /*
- * Detectar el rol guardado en el dispositivo.
- * La autorización real y el filtrado de solicitudes
- * deben realizarse también en el backend usando el JWT.
+ * Leer el rol de la sesión.
+ * La API también debe validar la identidad y la propiedad
+ * de la solicitud antes de aceptar una firma.
  */
 const usuarioGuardado = (() => {
   try {
@@ -278,17 +356,8 @@ const rolUsuario = (
 const esAdministrador = rolUsuario === 'administrador';
 const esVecino = rolUsuario === 'vecino';
 
-const solicitudes = computed(() => {
-  const grupos = new Map<
-    number,
-    {
-      solicitudId: number;
-      tipoResiduo: string | null;
-      direccion: string | null;
-      estadoActual: string | null;
-      eventos: HistorialSolicitudApi[];
-    }
-  >();
+const solicitudes = computed<GrupoSolicitud[]>(() => {
+  const grupos = new Map<number, GrupoSolicitud>();
 
   for (const item of historial.value) {
     if (!grupos.has(item.solicitudId)) {
@@ -297,7 +366,8 @@ const solicitudes = computed(() => {
         tipoResiduo: item.tipoResiduo,
         direccion: item.direccion,
         estadoActual: null,
-        eventos: []
+        eventos: [],
+        tieneFirma: false
       });
     }
 
@@ -307,13 +377,17 @@ const solicitudes = computed(() => {
   const resultado = Array.from(grupos.values());
 
   for (const grupo of resultado) {
-    // Orden cronológico inverso: el evento más reciente primero.
+    // Orden cronológico inverso: primero el evento más reciente.
     grupo.eventos.sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
     );
 
     grupo.estadoActual =
       grupo.eventos.find(evento => evento.estadoNuevo)?.estadoNuevo ?? null;
+
+    grupo.tieneFirma = grupo.eventos.some(
+      evento => evento.accion === 'FirmaConformidadRegistrada'
+    );
   }
 
   return resultado.sort((a, b) => {
@@ -323,6 +397,38 @@ const solicitudes = computed(() => {
     return new Date(fechaB).getTime() - new Date(fechaA).getTime();
   });
 });
+
+function normalizarEstado(estado: string | null): string {
+  return (estado || '').trim().toLowerCase();
+}
+
+function abrirFirma(grupo: GrupoSolicitud) {
+  // Nunca mostrar la firma al administrador ni al recolector.
+  if (!esVecino) return;
+
+  // Solo se firma cuando el recolector está en camino.
+  if (normalizarEstado(grupo.estadoActual) !== 'en camino') return;
+
+  if (grupo.tieneFirma) return;
+
+  solicitudParaFirma.value = {
+    solicitudId: grupo.solicitudId,
+    direccion: grupo.direccion,
+    tipoResiduo: grupo.tipoResiduo
+  };
+
+  firmaAbierta.value = true;
+}
+
+function cerrarFirma() {
+  firmaAbierta.value = false;
+  solicitudParaFirma.value = null;
+}
+
+async function alFinalizarFirma() {
+  cerrarFirma();
+  await cargarHistorial();
+}
 
 function tituloEvento(item: HistorialSolicitudApi): string {
   switch (item.accion) {
@@ -336,6 +442,9 @@ function tituloEvento(item: HistorialSolicitudApi): string {
       return item.estadoNuevo
         ? `Estado actualizado: ${item.estadoNuevo}`
         : 'Estado de solicitud actualizado';
+
+    case 'FirmaConformidadRegistrada':
+      return 'Firma de conformidad registrada';
 
     default:
       return item.accion.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -351,6 +460,7 @@ function iconoEvento(accion: string) {
       return eyeOutline;
 
     case 'EstadoActualizado':
+    case 'FirmaConformidadRegistrada':
       return checkmarkCircleOutline;
 
     default:
@@ -367,6 +477,7 @@ function claseEvento(accion: string): string {
       return 'evento-leido';
 
     case 'EstadoActualizado':
+    case 'FirmaConformidadRegistrada':
       return 'evento-actualizado';
 
     default:
@@ -375,7 +486,7 @@ function claseEvento(accion: string): string {
 }
 
 function colorEstado(estado: string): string {
-  switch (estado.toLowerCase()) {
+  switch (normalizarEstado(estado)) {
     case 'pendiente':
       return 'warning';
 
@@ -743,6 +854,75 @@ onMounted(cargarHistorial);
   line-height: 1.6;
 }
 
+.panel-firma {
+  margin: 18px 15px 20px;
+  padding: 18px;
+  border: 1px solid #d6e9dc;
+  border-radius: 16px;
+  background: #f7fcf8;
+}
+
+.panel-firma-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: #dcefe2;
+  color: #276749;
+  font-size: 23px;
+}
+
+.panel-firma-texto h3 {
+  margin: 0 0 7px;
+  color: #244b35;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.panel-firma-texto p {
+  margin: 0 0 15px;
+  color: #5d6d62;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.panel-firma ion-button {
+  margin: 0;
+  --border-radius: 11px;
+  font-weight: 650;
+}
+
+.firma-registrada {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 18px 15px 20px;
+  padding: 15px;
+  border: 1px solid #d6e9dc;
+  border-radius: 13px;
+  background: #f7fcf8;
+  color: #276749;
+}
+
+.firma-registrada > ion-icon {
+  flex-shrink: 0;
+  font-size: 25px;
+}
+
+.firma-registrada strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.firma-registrada p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .estado-vacio {
   display: flex;
   flex-direction: column;
@@ -813,4 +993,3 @@ onMounted(cargarHistorial);
   }
 }
 </style>
-

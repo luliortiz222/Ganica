@@ -1,4 +1,3 @@
-
 <template>
   <ion-page>
     <ion-header>
@@ -137,6 +136,7 @@
         >
           <ion-label class="ion-text-wrap">
             <h2><strong>{{ item.tipoResiduo }}</strong></h2>
+
             <p>📍 {{ item.direccion }}</p>
 
             <p v-if="item.observaciones">
@@ -152,6 +152,32 @@
               Estado:
               <strong>{{ item.estado }}</strong>
             </p>
+
+            <!-- Estado de la conformidad -->
+            <p v-if="tieneFirmaRegistrada(item)" class="estado-firma registrada">
+              <ion-icon :icon="checkmarkCircleOutline" />
+              Conformidad firmada y registrada
+            </p>
+
+            <p
+              v-else-if="estaEnCamino(item)"
+              class="estado-firma pendiente"
+            >
+              <ion-icon :icon="timeOutline" />
+              Conformidad pendiente de firma
+            </p>
+
+            <!-- Solo solicitudes reales del servidor pueden firmarse.
+                 Las solicitudes guardadas localmente aún no se pueden firmar. -->
+            <ion-button
+              v-if="puedeFirmar(item)"
+              expand="block"
+              class="ion-margin-top"
+              @click="abrirFirma(item)"
+            >
+              <ion-icon :icon="createOutline" slot="start" />
+              Firmar conformidad
+            </ion-button>
           </ion-label>
         </ion-item>
       </ion-list>
@@ -164,6 +190,17 @@
       :longitud-inicial="form.longitud"
       @confirmar="aplicarUbicacion"
       @cerrar="modalUbicacionAbierto = false"
+    />
+
+    <!-- Firma del vecino -->
+    <FirmaConformidad
+      v-if="solicitudParaFirma"
+      :abierto="modalFirmaAbierto"
+      :solicitud-id="solicitudParaFirma.id"
+      :direccion="solicitudParaFirma.direccion"
+      :tipo-residuo="solicitudParaFirma.tipoResiduo"
+      @cerrar="cerrarFirma"
+      @finalizada="finalizarFirma"
     />
   </ion-page>
 </template>
@@ -198,10 +235,13 @@ import {
   sendOutline,
   checkmarkCircleOutline,
   locationOutline,
-  micOutline
+  micOutline,
+  createOutline,
+  timeOutline
 } from 'ionicons/icons';
 
 import SelectorUbicacion from '@/components/SelectorUbicacion.vue';
+import FirmaConformidad from '@/components/FirmaConformidad.vue';
 
 import {
   crear_solicitud_api,
@@ -229,6 +269,11 @@ interface SolicitudLocal {
   estado: string;
 }
 
+interface SolicitudConFirma extends SolicitudApi {
+  firmaConformidadArchivo?: string | null;
+  firmaConformidadFecha?: string | null;
+}
+
 const form = ref({
   tipo: '',
   direccion: '',
@@ -242,6 +287,9 @@ const cargando = ref(false);
 const enviando = ref(false);
 const escuchandoVoz = ref(false);
 const modalUbicacionAbierto = ref(false);
+
+const solicitudParaFirma = ref<SolicitudApi | null>(null);
+const modalFirmaAbierto = ref(false);
 
 const CLAVE_LOCAL = 'ganica_solicitudes_vecino';
 
@@ -339,7 +387,6 @@ const cargarMisSolicitudes = async () => {
       locales = [];
     }
 
-    // Mostrar las solicitudes del servidor junto con las pendientes locales.
     const idsRemotos = new Set(remotas.map(s => s.id));
 
     misSolicitudes.value = [
@@ -359,7 +406,6 @@ const cargarMisSolicitudes = async () => {
   } catch (error) {
     console.error('Error al cargar solicitudes:', error);
 
-    // Si no hay conexión, al menos mostrar los registros guardados localmente.
     try {
       const locales: SolicitudLocal[] = JSON.parse(
         localStorage.getItem(CLAVE_LOCAL) || '[]'
@@ -414,7 +460,6 @@ const enviarSolicitud = async () => {
   };
 
   try {
-    // El backend identifica el servicio de solicitud y establece su ID.
     const respuesta = await crear_solicitud_api({
       servicioRecoleccionId: 0,
       tipoResiduo: datos.tipo,
@@ -423,6 +468,9 @@ const enviarSolicitud = async () => {
       latitud: datos.latitud,
       longitud: datos.longitud
     });
+
+    // La respuesta se obtiene del servidor; recargamos la lista.
+    void respuesta;
 
     limpiarFormulario();
 
@@ -469,6 +517,61 @@ const enviarSolicitud = async () => {
   } finally {
     enviando.value = false;
   }
+};
+
+const normalizarEstado = (estado: string | null | undefined) => {
+  return (estado || '').trim().toLocaleLowerCase('es-AR');
+};
+
+const estaEnCamino = (item: SolicitudApi) => {
+  return normalizarEstado(item.estado) === 'en camino';
+};
+
+const tieneFirmaRegistrada = (item: SolicitudApi) => {
+  const solicitud = item as SolicitudConFirma;
+
+  return Boolean(
+    solicitud.firmaConformidadArchivo ||
+    solicitud.firmaConformidadFecha
+  );
+};
+
+const puedeFirmar = (item: SolicitudApi) => {
+  return (
+    estaEnCamino(item) &&
+    !tieneFirmaRegistrada(item) &&
+    item.servicioRecoleccionId !== 0
+  );
+};
+
+const abrirFirma = (item: SolicitudApi) => {
+  if (!puedeFirmar(item)) {
+    void mostrarToast(
+      'Solo podés firmar una solicitud en camino que todavía no tenga conformidad registrada.',
+      'warning'
+    );
+    return;
+  }
+
+  solicitudParaFirma.value = item;
+  modalFirmaAbierto.value = true;
+};
+
+const cerrarFirma = () => {
+  modalFirmaAbierto.value = false;
+  solicitudParaFirma.value = null;
+};
+
+const finalizarFirma = async () => {
+  modalFirmaAbierto.value = false;
+  solicitudParaFirma.value = null;
+
+  await cargarMisSolicitudes();
+
+  await mostrarToast(
+    'Conformidad firmada y registrada correctamente.',
+    'success'
+  );
 };
 
 const formatearFecha = (fecha: string) => {
@@ -524,5 +627,20 @@ ion-item p {
   gap: 6px;
   margin: 6px 0;
   font-size: 13px;
+}
+
+.estado-firma {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.estado-firma.registrada {
+  color: var(--ion-color-success);
+}
+
+.estado-firma.pendiente {
+  color: var(--ion-color-warning-shade);
 }
 </style>

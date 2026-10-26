@@ -42,7 +42,7 @@ export const rutasNavegacion: RutaNavegacion[] = [
     titulo: 'Solicitudes',
     icono: documentTextOutline,
     componente: () => import('@/views/SolicitudesPage.vue'),
-    meta: { roles: ['administrador'] },
+    meta: { roles: ['administrador', 'recolector'] },
   },
   {
   name: 'HistorialSolicitudes',

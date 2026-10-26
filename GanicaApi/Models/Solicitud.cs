@@ -30,4 +30,8 @@ public class Solicitud
 
     // Relación con el usuario creador.
     public Usuario? Usuario { get; set; }
+
+    public string? FirmaConformidadArchivo { get; set; }
+
+    public DateTimeOffset? FirmaConformidadFecha { get; set; }
 }
