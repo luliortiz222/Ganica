@@ -31,6 +31,7 @@ import {
 } from '@ionic/vue';
 
 import {
+  refreshOutline,
   sunnyOutline,
   moonOutline,
   alertCircleOutline,
@@ -71,6 +72,7 @@ import {
 const router = useRouter();
 
 const esOscuro = ref(false);
+const recargandoInicio = ref(false);
 
 // ==========================================
 // USUARIO Y ROLES
@@ -104,10 +106,13 @@ const obtenerRolActual = (): string => {
   return '';
 };
 
-// El rol ahora es reactivo.
+// El usuario y el rol son reactivos.
+const usuarioSesion = ref(obtenerUsuarioActual());
 const rolSesion = ref(obtenerRolActual());
 
+// Actualiza ambos datos cuando cambia la sesión.
 const actualizarRolSesion = () => {
+  usuarioSesion.value = obtenerUsuarioActual();
   rolSesion.value = obtenerRolActual();
 };
 
@@ -127,8 +132,9 @@ const puedeGestionarSolicitudes = computed(
   () => esAdministrador.value || esRecolector.value
 );
 
+// El saludo ahora utiliza el usuario reactivo.
 const nombreUsuario = computed(() => {
-  const usuario = obtenerUsuarioActual();
+  const usuario = usuarioSesion.value;
 
   return (
     usuario?.nombre ||
@@ -138,6 +144,36 @@ const nombreUsuario = computed(() => {
     'Usuario'
   );
 });
+
+// ==========================================
+// RECARGAR INICIO
+// ==========================================
+
+const recargarInicio = async () => {
+  if (recargandoInicio.value) return;
+
+  recargandoInicio.value = true;
+
+  try {
+    // Leer el usuario y el rol actuales.
+    actualizarRolSesion();
+
+    // Actualizar el tema.
+    esOscuro.value = obtenerTemaGuardado();
+
+    // Recargar los servicios según el rol.
+    if (!esVecino.value) {
+      await servicios_store.cargar_servicios();
+    }
+
+    // Actualizar las notificaciones.
+    await cargarNotificaciones();
+  } catch (error) {
+    console.error('Error al recargar Inicio:', error);
+  } finally {
+    recargandoInicio.value = false;
+  }
+};
 
 // ==========================================
 // CONTROL DEL MODAL DE SERVICIOS
@@ -593,6 +629,17 @@ const alternarTema = () => {
         </ion-title>
 
         <ion-buttons slot="end">
+          <ion-button
+            @click="recargarInicio"
+            :disabled="recargandoInicio"
+            aria-label="Recargar inicio"
+          >
+            <ion-icon
+              :icon="refreshOutline"
+              slot="icon-only"
+            />
+          </ion-button>
+
           <ion-button
             @click="alternarTema"
             aria-label="Cambiar tema"

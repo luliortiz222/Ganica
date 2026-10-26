@@ -471,11 +471,32 @@ const mostrarLogin = () => {
 /* INICIAR SESIÓN */
 const handle = async () => {
   try {
-    await authService.login(credenciales.value);
+    // Iniciar sesión y guardar la respuesta de la API.
+    const respuestaLogin = await authService.login(
+      credenciales.value
+    );
 
+    // Comprobar qué devolvió el servidor.
+    console.log(
+      'RESPUESTA COMPLETA DEL LOGIN:',
+      respuestaLogin
+    );
+
+    // Comprobar los datos guardados después del login.
+    console.log(
+      'USUARIO GUARDADO:',
+      localStorage.getItem('usuario')
+    );
+
+    console.log(
+      'TOKEN GUARDADO:',
+      !!localStorage.getItem('token')
+    );
+
+    // Actualizar los datos visibles en Mi Cuenta.
     verificarSesion();
 
-    // Actualizar el rol y las rutas de toda la aplicación.
+    // Actualizar el menú y el inicio de toda la aplicación.
     notificarCambioSesion();
 
     const toast = await toastController.create({
@@ -487,7 +508,10 @@ const handle = async () => {
 
     await toast.present();
   } catch (error) {
-    console.error('Error al iniciar sesión:', error);
+    console.error(
+      'Error al iniciar sesión:',
+      error
+    );
 
     const toast = await toastController.create({
       message:
@@ -500,6 +524,7 @@ const handle = async () => {
     await toast.present();
   }
 };
+
 
 /* REGISTRAR USUARIO */
 const registrar = async () => {
