@@ -28,14 +28,14 @@ export const rutasNavegacion: RutaNavegacion[] = [
     componente: () => import('@/views/HomePage.vue'),
     meta: { roles: ['TODOS'] },
   },
-  {
-    name: 'Puntos',
-    path: '/puntos',
-    titulo: 'Puntos de Retiro',
-    icono: locationOutline,
-    componente: () => import('@/views/PuntosPage.vue'),
-    meta: { roles: ['administrador', 'recolector'] },
-  },
+ {
+  name: 'Puntos',
+  path: '/puntos',
+  titulo: 'Puntos de Retiro',
+  icono: locationOutline,
+  componente: () => import('@/views/PuntosPage.vue'),
+  meta: { roles: ['administrador', 'recolector', 'vecino'] },
+},
   {
     name: 'Solicitudes',
     path: '/solicitudes',
@@ -52,7 +52,7 @@ export const rutasNavegacion: RutaNavegacion[] = [
   componente: () =>
     import('@/views/HistorialSolicitudesPage.vue'),
   meta: {
-    roles: ['administrador', 'vecino']
+    roles: ['vecino']
   }
 },
   {

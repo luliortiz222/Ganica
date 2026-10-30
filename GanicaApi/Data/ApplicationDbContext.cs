@@ -24,6 +24,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<HistorialSolicitud> HistorialSolicitudes { get; set; }
 
+    public DbSet<PuntoRetiro> PuntoRetiro { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

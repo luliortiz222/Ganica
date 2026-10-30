@@ -220,6 +220,13 @@ namespace GanicaApi.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("Activo")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Barrio")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Direccion")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -228,11 +235,9 @@ namespace GanicaApi.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
-                    b.Property<double>("Latitud")
-                        .HasColumnType("double");
-
-                    b.Property<double>("Longitud")
-                        .HasColumnType("double");
+                    b.Property<string>("Materiales")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Nombre")
                         .IsRequired()
@@ -240,7 +245,7 @@ namespace GanicaApi.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PuntosRetiro");
+                    b.ToTable("PuntoRetiro");
                 });
 
             modelBuilder.Entity("GanicaApi.Models.RefreshToken", b =>
