@@ -1,4 +1,5 @@
 
+
 <template>
   <ion-page>
     <ion-header>
@@ -217,16 +218,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import {
+  ref,
+  computed,
+  onUnmounted
+} from 'vue';
 
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonButtons, IonMenuButton, IonSearchbar, IonCard,
-  IonCardHeader, IonCardTitle, IonCardSubtitle, IonCardContent,
-  IonChip, IonLabel, IonNote, IonIcon, IonRefresher,
-  IonRefresherContent, IonButton, IonSpinner, IonText,
-  IonModal, IonItem, IonInput, IonSelect, IonSelectOption,
-  IonTextarea, alertController
+  onIonViewWillEnter,
+  alertController,
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonMenuButton,
+  IonSearchbar,
+  IonCard,
+  IonCardHeader,
+  IonCardTitle,
+  IonCardSubtitle,
+  IonCardContent,
+  IonChip,
+  IonLabel,
+  IonNote,
+  IonIcon,
+  IonRefresher,
+  IonRefresherContent,
+  IonButton,
+  IonSpinner,
+  IonText,
+  IonModal,
+  IonItem,
+  IonInput,
+  IonSelect,
+  IonSelectOption,
+  IonTextarea
 } from '@ionic/vue';
 
 import {
@@ -246,20 +274,38 @@ import {
 // SESIÓN Y ROL
 // --------------------------------------------------
 
-const usuarioGuardado = localStorage.getItem('usuario');
+const rolUsuario = ref('');
 
-let rolUsuario = '';
+function actualizarRolUsuario() {
+  try {
+    const usuarioGuardado = localStorage.getItem('usuario');
+    const usuario = JSON.parse(usuarioGuardado || '{}');
 
-try {
-  const usuario = JSON.parse(usuarioGuardado || '{}');
-  rolUsuario = String(usuario.rol || '').trim().toLowerCase();
-} catch {
-  rolUsuario = '';
+    rolUsuario.value = String(usuario.rol || '')
+      .trim()
+      .toLowerCase();
+
+  } catch {
+    rolUsuario.value = '';
+  }
+
+  // Si la sesión deja de ser de administrador,
+  // cerramos cualquier formulario de gestión abierto.
+  if (rolUsuario.value !== 'administrador') {
+    mostrarFormulario.value = false;
+  }
 }
 
 const esAdministrador = computed(
-  () => rolUsuario === 'administrador'
+  () => rolUsuario.value === 'administrador'
 );
+
+// Detectar cambios de sesión desde otra pestaña.
+window.addEventListener('storage', actualizarRolUsuario);
+
+onUnmounted(() => {
+  window.removeEventListener('storage', actualizarRolUsuario);
+});
 
 // --------------------------------------------------
 // DATOS
@@ -289,8 +335,6 @@ const idEditando = ref<number | null>(null);
 // BARRIOS
 // --------------------------------------------------
 
-// Lista inicial editable. Solo incluye barrios,
-// no complejos habitacionales.
 const barrios = [
   'Centro',
   'Almirante Brown',
@@ -319,8 +363,8 @@ const barrios = [
   'Barrio Pellegrini',
   'Barrio Santa Rita',
   'Barrio Sur',
-  'Barrio Villa Celestina', 
-  'Barrio Güemes', 
+  'Barrio Villa Celestina',
+  'Barrio Güemes',
   'Barrio San Jose'
 ];
 
@@ -366,10 +410,12 @@ async function cargarPuntos() {
 
   try {
     const respuesta = await puntosRetiroService.listar();
-
     puntos.value = respuesta.map(convertirPunto);
+
   } catch (e: any) {
-    error.value = e?.message || 'No se pudieron cargar los puntos de retiro.';
+    error.value =
+      e?.message || 'No se pudieron cargar los puntos de retiro.';
+
   } finally {
     cargando.value = false;
   }
@@ -382,9 +428,11 @@ async function cargarPuntos() {
 async function hacerRecarga(event: CustomEvent) {
   busqueda.value = '';
 
-  await cargarPuntos();
-
-  (event.target as HTMLIonRefresherElement)?.complete();
+  try {
+    await cargarPuntos();
+  } finally {
+    (event.target as HTMLIonRefresherElement)?.complete();
+  }
 }
 
 // --------------------------------------------------
@@ -409,6 +457,8 @@ const puntosFiltrados = computed(() => {
 // --------------------------------------------------
 
 function abrirFormularioNuevo() {
+  actualizarRolUsuario();
+
   if (!esAdministrador.value) return;
 
   form.value = formularioVacio();
@@ -423,6 +473,8 @@ function abrirFormularioNuevo() {
 // --------------------------------------------------
 
 function abrirFormularioEditar(punto: PuntoRetiroVista) {
+  actualizarRolUsuario();
+
   if (!esAdministrador.value) return;
 
   form.value = {
@@ -446,6 +498,9 @@ function abrirFormularioEditar(punto: PuntoRetiroVista) {
 function cerrarFormulario() {
   mostrarFormulario.value = false;
   errorFormulario.value = '';
+  form.value = formularioVacio();
+  editando.value = false;
+  idEditando.value = null;
 }
 
 // --------------------------------------------------
@@ -453,7 +508,13 @@ function cerrarFormulario() {
 // --------------------------------------------------
 
 async function guardarPunto() {
-  if (!esAdministrador.value) return;
+  actualizarRolUsuario();
+
+  if (!esAdministrador.value) {
+    errorFormulario.value =
+      'No tenés permisos para gestionar puntos de retiro.';
+    return;
+  }
 
   errorFormulario.value = '';
 
@@ -476,11 +537,19 @@ async function guardarPunto() {
     return;
   }
 
+  const estabaEditando = editando.value;
+  const id = idEditando.value;
+
+  if (estabaEditando && id === null) {
+    errorFormulario.value = 'No se pudo identificar el punto a modificar.';
+    return;
+  }
+
   guardando.value = true;
 
   try {
-    if (editando.value && idEditando.value !== null) {
-      await puntosRetiroService.modificar(idEditando.value, datos);
+    if (estabaEditando && id !== null) {
+      await puntosRetiroService.modificar(id, datos);
     } else {
       await puntosRetiroService.crear(datos);
     }
@@ -490,7 +559,7 @@ async function guardarPunto() {
 
     const alerta = await alertController.create({
       header: 'Operación exitosa',
-      message: editando.value
+      message: estabaEditando
         ? 'El punto de retiro fue actualizado correctamente.'
         : 'El punto de retiro fue creado correctamente.',
       buttons: ['Aceptar']
@@ -499,7 +568,9 @@ async function guardarPunto() {
     await alerta.present();
 
   } catch (e: any) {
-    errorFormulario.value = e?.message || 'No se pudo guardar el punto de retiro.';
+    errorFormulario.value =
+      e?.message || 'No se pudo guardar el punto de retiro.';
+
   } finally {
     guardando.value = false;
   }
@@ -510,6 +581,8 @@ async function guardarPunto() {
 // --------------------------------------------------
 
 async function confirmarDesactivacion(punto: PuntoRetiroVista) {
+  actualizarRolUsuario();
+
   if (!esAdministrador.value) return;
 
   const alerta = await alertController.create({
@@ -525,12 +598,26 @@ async function confirmarDesactivacion(punto: PuntoRetiroVista) {
         role: 'destructive',
         handler: async () => {
           try {
+            actualizarRolUsuario();
+
+            if (!esAdministrador.value) return;
+
             await puntosRetiroService.desactivar(punto.id);
             await cargarPuntos();
+
+            const confirmacion = await alertController.create({
+              header: 'Operación exitosa',
+              message: 'El punto de retiro fue desactivado correctamente.',
+              buttons: ['Aceptar']
+            });
+
+            await confirmacion.present();
+
           } catch (e: any) {
             const errorAlerta = await alertController.create({
               header: 'No se pudo desactivar',
-              message: e?.message || 'Ocurrió un error al desactivar el punto.',
+              message:
+                e?.message || 'Ocurrió un error al desactivar el punto.',
               buttons: ['Aceptar']
             });
 
@@ -545,10 +632,13 @@ async function confirmarDesactivacion(punto: PuntoRetiroVista) {
 }
 
 // --------------------------------------------------
-// INICIO
+// INGRESO A LA PANTALLA
 // --------------------------------------------------
 
-onMounted(() => {
+// Ionic puede mantener esta página en memoria.
+// Este evento se ejecuta cada vez que volvemos a entrar.
+onIonViewWillEnter(() => {
+  actualizarRolUsuario();
   cargarPuntos();
 });
 </script>
