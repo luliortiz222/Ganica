@@ -1,3 +1,4 @@
+
 <template>
   <ion-page>
     <ion-header>
@@ -153,8 +154,10 @@
               <strong>{{ item.estado }}</strong>
             </p>
 
-            <!-- Estado de la conformidad -->
-            <p v-if="tieneFirmaRegistrada(item)" class="estado-firma registrada">
+            <p
+              v-if="tieneFirmaRegistrada(item)"
+              class="estado-firma registrada"
+            >
               <ion-icon :icon="checkmarkCircleOutline" />
               Conformidad firmada y registrada
             </p>
@@ -167,8 +170,6 @@
               Conformidad pendiente de firma
             </p>
 
-            <!-- Solo solicitudes reales del servidor pueden firmarse.
-                 Las solicitudes guardadas localmente aún no se pueden firmar. -->
             <ion-button
               v-if="puedeFirmar(item)"
               expand="block"
@@ -192,7 +193,6 @@
       @cerrar="modalUbicacionAbierto = false"
     />
 
-    <!-- Firma del vecino -->
     <FirmaConformidad
       v-if="solicitudParaFirma"
       :abierto="modalFirmaAbierto"
@@ -262,17 +262,24 @@ interface Ubicacion {
 
 interface SolicitudLocal {
   id: number;
+  servicioRecoleccionId: number;
   tipoResiduo: string;
   direccion: string;
   observaciones: string;
   fechaCreacion: string;
   estado: string;
+  latitud: number | null;
+  longitud: number | null;
+  firmaConformidadArchivo?: string | null;
+  firmaConformidadFecha?: string | null;
 }
 
 interface SolicitudConFirma extends SolicitudApi {
   firmaConformidadArchivo?: string | null;
   firmaConformidadFecha?: string | null;
 }
+
+const CLAVE_LOCAL = 'ganica_solicitudes_vecino';
 
 const form = ref({
   tipo: '',
@@ -291,8 +298,6 @@ const modalUbicacionAbierto = ref(false);
 const solicitudParaFirma = ref<SolicitudApi | null>(null);
 const modalFirmaAbierto = ref(false);
 
-const CLAVE_LOCAL = 'ganica_solicitudes_vecino';
-
 const mostrarToast = async (
   mensaje: string,
   color: 'success' | 'warning' | 'danger'
@@ -305,6 +310,40 @@ const mostrarToast = async (
   });
 
   await toast.present();
+};
+
+const leerSolicitudesLocales = (): SolicitudLocal[] => {
+  try {
+    const datos = localStorage.getItem(CLAVE_LOCAL);
+
+    if (!datos) return [];
+
+    const solicitudes = JSON.parse(datos);
+
+    return Array.isArray(solicitudes) ? solicitudes : [];
+  } catch (error) {
+    console.error('Error al leer solicitudes locales:', error);
+    return [];
+  }
+};
+
+const guardarSolicitudesLocales = (
+  solicitudes: SolicitudLocal[]
+) => {
+  localStorage.setItem(
+    CLAVE_LOCAL,
+    JSON.stringify(solicitudes)
+  );
+};
+
+const guardarPendienteLocal = (
+  solicitud: SolicitudLocal
+) => {
+  const guardadas = leerSolicitudesLocales();
+
+  guardadas.unshift(solicitud);
+
+  guardarSolicitudesLocales(guardadas);
 };
 
 const aplicarUbicacion = (ubicacion: Ubicacion) => {
@@ -352,77 +391,50 @@ const dictarObservaciones = async () => {
   }
 };
 
-const guardarPendienteLocal = (solicitud: SolicitudLocal) => {
-  let guardadas: SolicitudLocal[] = [];
-
-  try {
-    guardadas = JSON.parse(
-      localStorage.getItem(CLAVE_LOCAL) || '[]'
-    );
-  } catch {
-    guardadas = [];
-  }
-
-  guardadas.unshift(solicitud);
-
-  localStorage.setItem(
-    CLAVE_LOCAL,
-    JSON.stringify(guardadas)
-  );
+const convertirSolicitudLocal = (
+  solicitud: SolicitudLocal
+): SolicitudApi => {
+  return {
+    id: solicitud.id,
+    servicioRecoleccionId: solicitud.servicioRecoleccionId,
+    tipoResiduo: solicitud.tipoResiduo,
+    direccion: solicitud.direccion,
+    observaciones: solicitud.observaciones,
+    fechaCreacion: solicitud.fechaCreacion,
+    estado: solicitud.estado,
+    latitud: solicitud.latitud,
+    longitud: solicitud.longitud,
+    firmaConformidadArchivo: solicitud.firmaConformidadArchivo ?? null,
+    firmaConformidadFecha: solicitud.firmaConformidadFecha ?? null
+  };
 };
 
 const cargarMisSolicitudes = async () => {
   cargando.value = true;
 
+  const locales = leerSolicitudesLocales();
+
   try {
     const remotas = await listar_solicitudes_api();
 
-    let locales: SolicitudLocal[] = [];
+    const idsRemotos = new Set(
+      remotas.map(solicitud => solicitud.id)
+    );
 
-    try {
-      locales = JSON.parse(
-        localStorage.getItem(CLAVE_LOCAL) || '[]'
-      );
-    } catch {
-      locales = [];
-    }
-
-    const idsRemotos = new Set(remotas.map(s => s.id));
+    const localesNoDuplicadas = locales.filter(
+      solicitud => !idsRemotos.has(solicitud.id)
+    );
 
     misSolicitudes.value = [
-      ...locales
-        .filter(s => !idsRemotos.has(s.id))
-        .map(s => ({
-          id: s.id,
-          servicioRecoleccionId: 0,
-          tipoResiduo: s.tipoResiduo,
-          direccion: s.direccion,
-          observaciones: s.observaciones,
-          fechaCreacion: s.fechaCreacion,
-          estado: s.estado
-        }) as SolicitudApi),
+      ...localesNoDuplicadas.map(convertirSolicitudLocal),
       ...remotas
     ];
   } catch (error) {
     console.error('Error al cargar solicitudes:', error);
 
-    try {
-      const locales: SolicitudLocal[] = JSON.parse(
-        localStorage.getItem(CLAVE_LOCAL) || '[]'
-      );
-
-      misSolicitudes.value = locales.map(s => ({
-        id: s.id,
-        servicioRecoleccionId: 0,
-        tipoResiduo: s.tipoResiduo,
-        direccion: s.direccion,
-        observaciones: s.observaciones,
-        fechaCreacion: s.fechaCreacion,
-        estado: s.estado
-      })) as SolicitudApi[];
-    } catch {
-      misSolicitudes.value = [];
-    }
+    misSolicitudes.value = locales.map(
+      convertirSolicitudLocal
+    );
   } finally {
     cargando.value = false;
   }
@@ -460,17 +472,13 @@ const enviarSolicitud = async () => {
   };
 
   try {
-    const respuesta = await crear_solicitud_api({
-      servicioRecoleccionId: 0,
+    await crear_solicitud_api({
       tipoResiduo: datos.tipo,
       direccion: datos.direccion,
       observaciones: datos.observaciones,
       latitud: datos.latitud,
       longitud: datos.longitud
     });
-
-    // La respuesta se obtiene del servidor; recargamos la lista.
-    void respuesta;
 
     limpiarFormulario();
 
@@ -487,39 +495,45 @@ const enviarSolicitud = async () => {
       ? error.message
       : '';
 
-    if (
+    const fueEncolada =
       mensaje.includes('Sin conexión') ||
-      mensaje.includes('Tiempo de espera')
-    ) {
+      mensaje.includes('Tiempo de espera');
+
+    if (fueEncolada) {
       guardarPendienteLocal({
-        id: Date.now(),
+        id: -Date.now(),
+        servicioRecoleccionId: 0,
         tipoResiduo: datos.tipo,
         direccion: datos.direccion,
         observaciones: datos.observaciones,
         fechaCreacion: new Date().toISOString(),
-        estado: 'Sin enviar'
+        estado: 'Sin enviar',
+        latitud: datos.latitud,
+        longitud: datos.longitud
       });
 
       limpiarFormulario();
 
+      await cargarMisSolicitudes();
+
       await mostrarToast(
-        'Sin conexión. La solicitud quedó guardada localmente.',
+        'Sin conexión. La solicitud quedó guardada y se enviará cuando vuelva internet.',
         'warning'
       );
     } else {
       await mostrarToast(
-        'No se pudo registrar la solicitud. Revisá tu conexión e intentá nuevamente.',
+        mensaje || 'No se pudo registrar la solicitud.',
         'danger'
       );
     }
-
-    await cargarMisSolicitudes();
   } finally {
     enviando.value = false;
   }
 };
 
-const normalizarEstado = (estado: string | null | undefined) => {
+const normalizarEstado = (
+  estado: string | null | undefined
+) => {
   return (estado || '').trim().toLocaleLowerCase('es-AR');
 };
 
@@ -540,7 +554,8 @@ const puedeFirmar = (item: SolicitudApi) => {
   return (
     estaEnCamino(item) &&
     !tieneFirmaRegistrada(item) &&
-    item.servicioRecoleccionId !== 0
+    item.servicioRecoleccionId !== 0 &&
+    item.id > 0
   );
 };
 
@@ -588,6 +603,10 @@ const actualizarTrasSincronizacion = () => {
   void cargarMisSolicitudes();
 };
 
+const actualizarAlVolverInternet = () => {
+  void cargarMisSolicitudes();
+};
+
 onMounted(() => {
   void cargarMisSolicitudes();
 
@@ -595,12 +614,22 @@ onMounted(() => {
     'solicitudes-sincronizadas',
     actualizarTrasSincronizacion
   );
+
+  window.addEventListener(
+    'online',
+    actualizarAlVolverInternet
+  );
 });
 
 onUnmounted(() => {
   window.removeEventListener(
     'solicitudes-sincronizadas',
     actualizarTrasSincronizacion
+  );
+
+  window.removeEventListener(
+    'online',
+    actualizarAlVolverInternet
   );
 });
 </script>

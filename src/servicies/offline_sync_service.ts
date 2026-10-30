@@ -2,6 +2,9 @@
 import { offline_queue } from "@/stores/offline_queue";
 import { obtener_api_url } from "@/config/debug";
 
+const CLAVE_SOLICITUDES = "ganica_solicitudes_vecino";
+
+// Construye la URL de la API.
 function construir_url(endpoint: string): string {
   const api_url = obtener_api_url();
 
@@ -9,10 +12,94 @@ function construir_url(endpoint: string): string {
     throw new Error("No se configuró la URL de la API.");
   }
 
-  return `${api_url}/${String(endpoint).replace(/^\/+/, "")}`;
+  return `${api_url.replace(/\/+$/, "")}/${String(endpoint).replace(/^\/+/, "")}`;
 }
 
-export async function sincronizar_cola(): Promise<void> {
+// Comprueba si la operación corresponde a una solicitud.
+function esSolicitud(endpoint: string): boolean {
+  return endpoint
+    .replace(/^\/+/, "")
+    .split("?")[0]
+    .toLocaleLowerCase("es-AR") === "solicitudes";
+}
+
+// Actualiza la solicitud guardada localmente después de enviarla.
+function actualizarSolicitudLocal(
+  datosEnviados: any,
+  respuesta: any
+): void {
+  try {
+    const contenido = localStorage.getItem(CLAVE_SOLICITUDES);
+
+    if (!contenido) return;
+
+    const solicitudes = JSON.parse(contenido);
+
+    if (!Array.isArray(solicitudes)) return;
+
+    let actualizada = false;
+
+    const solicitudesActualizadas = solicitudes.map(
+      (solicitud: any) => {
+        if (actualizada) return solicitud;
+
+        const estado = String(solicitud.estado || "")
+          .trim()
+          .toLocaleLowerCase("es-AR");
+
+        const coincide =
+          (estado === "sin enviar" || estado === "sin_enviar") &&
+          solicitud.tipoResiduo === datosEnviados.tipoResiduo &&
+          solicitud.direccion === datosEnviados.direccion &&
+          (solicitud.observaciones || "") ===
+            (datosEnviados.observaciones || "") &&
+          (solicitud.latitud ?? null) ===
+            (datosEnviados.latitud ?? null) &&
+          (solicitud.longitud ?? null) ===
+            (datosEnviados.longitud ?? null);
+
+        if (!coincide) return solicitud;
+
+        actualizada = true;
+
+        return {
+          ...solicitud,
+          id: respuesta?.id ?? solicitud.id,
+          servicioRecoleccionId:
+            respuesta?.servicioRecoleccionId ??
+            solicitud.servicioRecoleccionId ??
+            0,
+          estado: respuesta?.estado || "Pendiente",
+          fechaCreacion:
+            respuesta?.fechaCreacion || solicitud.fechaCreacion,
+          firmaConformidadArchivo:
+            respuesta?.firmaConformidadArchivo ?? null,
+          firmaConformidadFecha:
+            respuesta?.firmaConformidadFecha ?? null
+        };
+      }
+    );
+
+    localStorage.setItem(
+      CLAVE_SOLICITUDES,
+      JSON.stringify(solicitudesActualizadas)
+    );
+
+  } catch (error) {
+    console.error(
+      "No se pudieron actualizar las solicitudes locales:",
+      error
+    );
+  }
+}
+
+// Ejecuta la sincronización de la cola.
+async function ejecutar_sincronizacion_cola(): Promise<void> {
+  if (!navigator.onLine) {
+    console.log("Sin conexión. Se pospone la sincronización.");
+    return;
+  }
+
   const cola = offline_queue.obtener_cola();
 
   if (cola.length === 0) {
@@ -30,114 +117,120 @@ export async function sincronizar_cola(): Promise<void> {
     try {
       const url = construir_url(operacion.endpoint);
 
-      const esFormData = operacion.options.body instanceof FormData;
+      const encabezados = new Headers(operacion.options.headers);
 
-      const headers: Record<string, string> = {};
+      const esFormData =
+        operacion.options.body instanceof FormData;
 
-      if (!esFormData) {
-        headers["Content-Type"] = "application/json";
+      if (!esFormData && !encabezados.has("Content-Type")) {
+        encabezados.set("Content-Type", "application/json");
       }
 
       if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
+        encabezados.set("Authorization", `Bearer ${token}`);
       }
 
       const response = await fetch(url, {
         ...operacion.options,
-        headers: {
-          ...headers,
-          ...operacion.options.headers
-        }
+        headers: encabezados
       });
 
       if (!response.ok) {
+        const detalle = await response.text();
+
         throw new Error(
-          `Error HTTP al sincronizar: ${response.status}`
+          `Error HTTP al sincronizar: ${response.status}. ${detalle}`
         );
       }
 
-      const respuesta = await response.json();
+      const textoRespuesta = await response.text();
 
+      let respuesta: any = {};
+
+      if (textoRespuesta.trim()) {
+        try {
+          respuesta = JSON.parse(textoRespuesta);
+        } catch {
+          respuesta = {};
+        }
+      }
+
+      if (esSolicitud(operacion.endpoint)) {
+        let datosEnviados: any = {};
+
+        if (typeof operacion.options.body === "string") {
+          try {
+            datosEnviados = JSON.parse(
+              operacion.options.body
+            );
+          } catch {
+            datosEnviados = {};
+          }
+        }
+
+        actualizarSolicitudLocal(
+          datosEnviados,
+          respuesta
+        );
+      }
+
+      // Se elimina de la cola solamente si se envió correctamente.
       offline_queue.eliminar_operacion(operacion.id);
 
       console.log(
         `Operación sincronizada correctamente: ${operacion.endpoint}`
       );
 
-      if (operacion.endpoint === "Solicitudes") {
-        const claveSolicitudes = "ganica_solicitudes";
-        const datosSolicitudes = localStorage.getItem(claveSolicitudes);
+      window.dispatchEvent(
+        new CustomEvent("solicitudes-sincronizadas")
+      );
 
-        if (datosSolicitudes) {
-          try {
-            const solicitudes = JSON.parse(datosSolicitudes);
-
-            // Intentamos relacionar la operación enviada con
-            // la solicitud local mediante sus datos originales.
-            let datosEnviados: any = {};
-
-            try {
-              if (typeof operacion.options.body === "string") {
-                datosEnviados = JSON.parse(operacion.options.body);
-              }
-            } catch {
-              datosEnviados = {};
-            }
-
-            let actualizada = false;
-
-            const solicitudesActualizadas = solicitudes.map(
-              (solicitud: any) => {
-                const coincide =
-                  !actualizada &&
-                  solicitud.estado === "sin_enviar" &&
-                  solicitud.tipo === datosEnviados.tipoResiduo &&
-                  solicitud.direccion === datosEnviados.direccion &&
-                  solicitud.observaciones === datosEnviados.observaciones &&
-                  (solicitud.latitud ?? null) ===
-                    (datosEnviados.latitud ?? null) &&
-                  (solicitud.longitud ?? null) ===
-                    (datosEnviados.longitud ?? null);
-
-                if (coincide) {
-                  actualizada = true;
-
-                  return {
-                    ...solicitud,
-                    estado: "enviada",
-                    id: respuesta?.id ?? solicitud.id
-                  };
-                }
-
-                return solicitud;
-              }
-            );
-
-            localStorage.setItem(
-              claveSolicitudes,
-              JSON.stringify(solicitudesActualizadas)
-            );
-
-            window.dispatchEvent(
-              new CustomEvent("solicitudes-sincronizadas")
-            );
-          } catch (error) {
-            console.error(
-              "No se pudieron actualizar las solicitudes locales:",
-              error
-            );
-          }
-        }
-      }
     } catch (error) {
       console.error(
         `No se pudo sincronizar: ${operacion.endpoint}`,
         error
       );
 
-      // Si falla, la operación permanece en la cola
-      // para volver a intentarlo posteriormente.
+      // La operación permanece pendiente para otro intento.
       continue;
     }
   }
+}
+
+// Evita ejecutar varias sincronizaciones simultáneamente.
+let sincronizacionEnCurso = false;
+
+export async function sincronizar_cola(): Promise<void> {
+  if (sincronizacionEnCurso) return;
+
+  sincronizacionEnCurso = true;
+
+  try {
+    await ejecutar_sincronizacion_cola();
+  } finally {
+    sincronizacionEnCurso = false;
+  }
+}
+
+// Inicia la sincronización automática cuando vuelve internet.
+export function iniciar_sincronizacion_automatica(): () => void {
+  const sincronizarAlConectar = () => {
+    console.log(
+      "Conexión recuperada. Sincronizando solicitudes..."
+    );
+
+    void sincronizar_cola();
+  };
+
+  // Si la aplicación se abre con internet, sincroniza inmediatamente.
+  if (navigator.onLine) {
+    void sincronizar_cola();
+  }
+
+  window.addEventListener("online", sincronizarAlConectar);
+
+  // Permite retirar el evento cuando se desmonta la aplicación.
+  return () => {
+    window.removeEventListener("online", sincronizarAlConectar);
+  };
 }

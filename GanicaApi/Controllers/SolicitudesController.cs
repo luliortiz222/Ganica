@@ -1,3 +1,4 @@
+
 using System.Security.Claims;
 using GanicaApi.Data;
 using GanicaApi.Models;
@@ -26,10 +27,10 @@ public class SolicitudesController : ControllerBase
         return long.TryParse(claim, out usuarioId);
     }
 
-    // Listar solicitudes:
-    // Administrador: todas.
-    // Recolector: las recibidas mediante notificación.
-    // Vecino: solamente las que creó.
+    // LISTAR SOLICITUDES:
+    // Administrador: todas las solicitudes.
+    // Recolector: solamente las solicitudes que recibió mediante notificación.
+    // Vecino: solamente las solicitudes que creó.
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Solicitud>>> GetSolicitudes()
     {
@@ -69,10 +70,10 @@ public class SolicitudesController : ControllerBase
         return Forbid();
     }
 
-    // Crear solicitudes:
-    // Administrador y vecino.
+    // CREAR SOLICITUD:
+    // Exclusivamente el vecino.
     [HttpPost]
-    [Authorize(Roles = "administrador,vecino")]
+    [Authorize(Roles = "vecino")]
     public async Task<ActionResult<Solicitud>> PostSolicitud(
         [FromBody] Solicitud solicitud)
     {
@@ -114,7 +115,7 @@ public class SolicitudesController : ControllerBase
             });
         }
 
-        // Validar que el tipo de residuo esté permitido.
+        // Validar tipos de residuos permitidos.
         var tiposPermitidos = new[]
         {
             "Poda y Escombros",
@@ -141,18 +142,17 @@ public class SolicitudesController : ControllerBase
         solicitud.FechaCreacion = DateTime.Now;
         solicitud.Estado = "Pendiente";
 
-        // Nunca confiar en un UsuarioId enviado desde el cliente.
-        // Se utiliza la identidad autenticada del token.
+        // El UsuarioId siempre se obtiene del token.
         solicitud.UsuarioId = usuarioId;
 
-        // Evitar que el cliente intente asignar otra entidad de navegación.
+        // Evitar asignaciones de navegación enviadas por el cliente.
         solicitud.Usuario = null;
         solicitud.ServicioRecoleccion = null;
 
         _context.Solicitudes.Add(solicitud);
         await _context.SaveChangesAsync();
 
-        // Registrar la creación en el historial.
+        // Registrar creación en el historial.
         _context.HistorialSolicitudes.Add(new HistorialSolicitud
         {
             SolicitudId = solicitud.Id,
@@ -161,10 +161,34 @@ public class SolicitudesController : ControllerBase
             EstadoAnterior = null,
             EstadoNuevo = solicitud.Estado,
             Fecha = DateTimeOffset.UtcNow,
-            Observacion = User.IsInRole("vecino")
-                ? "Solicitud de recolección creada por un vecino."
-                : "Solicitud de recolección creada por un administrador."
+            Observacion = "Solicitud de recolección creada por un vecino."
         });
+
+        // Buscar administradores activos.
+        var administradores = await _context.Usuarios
+            .Include(u => u.Rol)
+            .Where(u =>
+                u.Activo &&
+                u.Rol != null &&
+                u.Rol.Codigo == "administrador")
+            .ToListAsync();
+
+        // Notificar a todos los administradores activos.
+        foreach (var administrador in administradores)
+        {
+            _context.Notificaciones.Add(new Notificacion
+            {
+                UsuarioId = administrador.Id,
+                SolicitudId = solicitud.Id,
+                Titulo = "Nueva solicitud de un vecino",
+                Mensaje =
+                    $"Un vecino generó una solicitud de {solicitud.TipoResiduo}. " +
+                    $"Dirección: {solicitud.Direccion}. " +
+                    $"Observaciones: {solicitud.Observaciones}",
+                Tipo = TipoNotificacion.Entrega,
+                CreadoEn = DateTimeOffset.UtcNow
+            });
+        }
 
         // Buscar recolectores activos.
         var recolectores = await _context.Usuarios
@@ -175,7 +199,7 @@ public class SolicitudesController : ControllerBase
                 u.Rol.Codigo == "recolector")
             .ToListAsync();
 
-        // Notificar a cada recolector activo.
+        // Notificar a todos los recolectores activos.
         foreach (var recolector in recolectores)
         {
             _context.Notificaciones.Add(new Notificacion
@@ -192,75 +216,74 @@ public class SolicitudesController : ControllerBase
             });
         }
 
+        // Guardar historial y todas las notificaciones.
         await _context.SaveChangesAsync();
 
         return Ok(solicitud);
     }
 
-    // Consultar historial: exclusivamente administrador.
+    // CONSULTAR HISTORIAL:
+    // Administrador: todo el historial.
+    // Vecino: historial de sus propias solicitudes.
     [HttpGet("historial")]
-[Authorize(Roles = "administrador,vecino")]
-public async Task<IActionResult> GetHistorialSolicitudes()
-{
-    if (!ObtenerUsuarioId(out var usuarioId))
-        return Unauthorized();
-
-    var consulta = _context.HistorialSolicitudes
-        .AsNoTracking()
-        .AsQueryable();
-
-    // El administrador puede consultar toda la trazabilidad.
-    if (User.IsInRole("administrador"))
+    [Authorize(Roles = "administrador,vecino")]
+    public async Task<IActionResult> GetHistorialSolicitudes()
     {
-        // No se aplica ningún filtro.
-    }
-    // El vecino solo puede consultar los eventos
-    // de solicitudes cuyo UsuarioId sea el suyo.
-    else if (User.IsInRole("vecino"))
-    {
-        consulta = consulta.Where(h =>
-            h.Solicitud != null &&
-            h.Solicitud.UsuarioId == usuarioId);
-    }
-    else
-    {
-        return Forbid();
-    }
+        if (!ObtenerUsuarioId(out var usuarioId))
+            return Unauthorized();
 
-    var historial = await consulta
-        .OrderByDescending(h => h.Fecha)
-        .Select(h => new
+        var consulta = _context.HistorialSolicitudes
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (User.IsInRole("administrador"))
         {
-            h.Id,
-            h.SolicitudId,
-            h.UsuarioId,
+            // El administrador puede consultar todo el historial.
+        }
+        else if (User.IsInRole("vecino"))
+        {
+            consulta = consulta.Where(h =>
+                h.Solicitud != null &&
+                h.Solicitud.UsuarioId == usuarioId);
+        }
+        else
+        {
+            return Forbid();
+        }
 
-            UsuarioEmail = h.Usuario != null
-                ? h.Usuario.Email
-                : null,
+        var historial = await consulta
+            .OrderByDescending(h => h.Fecha)
+            .Select(h => new
+            {
+                h.Id,
+                h.SolicitudId,
+                h.UsuarioId,
 
-            h.Accion,
-            h.EstadoAnterior,
-            h.EstadoNuevo,
-            h.Fecha,
-            h.Observacion,
+                UsuarioEmail = h.Usuario != null
+                    ? h.Usuario.Email
+                    : null,
 
-            TipoResiduo = h.Solicitud != null
-                ? h.Solicitud.TipoResiduo
-                : null,
+                h.Accion,
+                h.EstadoAnterior,
+                h.EstadoNuevo,
+                h.Fecha,
+                h.Observacion,
 
-            Direccion = h.Solicitud != null
-                ? h.Solicitud.Direccion
-                : null
-        })
-        .ToListAsync();
+                TipoResiduo = h.Solicitud != null
+                    ? h.Solicitud.TipoResiduo
+                    : null,
 
-    return Ok(historial);
-}
+                Direccion = h.Solicitud != null
+                    ? h.Solicitud.Direccion
+                    : null
+            })
+            .ToListAsync();
 
+        return Ok(historial);
+    }
 
-    // Guardar la firma de conformidad del vecino.
-    // Solo puede firmar el vecino propietario de la solicitud.
+    // GUARDAR FIRMA DE CONFORMIDAD:
+    // Exclusivamente el vecino propietario de la solicitud.
     [HttpPost("{id}/firma")]
     [Authorize(Roles = "vecino")]
     [RequestSizeLimit(2_000_000)]
@@ -309,14 +332,10 @@ public async Task<IActionResult> GetHistorialSolicitudes()
             });
         }
 
-        // Seguridad: el vecino solo puede firmar su propia solicitud.
+        // El vecino solo puede firmar su propia solicitud.
         if (solicitud.UsuarioId != usuarioId)
-        {
             return Forbid();
-        }
 
-        // La firma solo está habilitada cuando el recolector
-        // cambió el estado a "En camino".
         if (solicitud.Estado != "En camino")
         {
             return BadRequest(new
@@ -335,7 +354,7 @@ public async Task<IActionResult> GetHistorialSolicitudes()
             });
         }
 
-        // Validar la firma binaria real del PNG.
+        // Validar encabezado binario PNG.
         byte[] encabezado = new byte[8];
 
         await using (var stream = firma.OpenReadStream())
@@ -357,8 +376,7 @@ public async Task<IActionResult> GetHistorialSolicitudes()
             }
         }
 
-        // Guardar la imagen fuera de wwwroot para que no
-        // quede publicada directamente como archivo estático.
+        // Guardar fuera de wwwroot.
         var carpeta = Path.Combine(
             Directory.GetCurrentDirectory(),
             "App_Data",
@@ -390,10 +408,7 @@ public async Task<IActionResult> GetHistorialSolicitudes()
                 new HistorialSolicitud
                 {
                     SolicitudId = solicitud.Id,
-
-                    // El evento lo registra el vecino autenticado.
                     UsuarioId = usuarioId,
-
                     Accion = "FirmaConformidadRegistrada",
                     EstadoAnterior = estadoAnterior,
                     EstadoNuevo = "Finalizada",
@@ -406,8 +421,7 @@ public async Task<IActionResult> GetHistorialSolicitudes()
 
             return Ok(new
             {
-                mensaje =
-                    "Firma de conformidad registrada correctamente.",
+                mensaje = "Firma de conformidad registrada correctamente.",
                 solicitudId = solicitud.Id,
                 estado = solicitud.Estado,
                 firmaRegistrada = true,
@@ -416,8 +430,6 @@ public async Task<IActionResult> GetHistorialSolicitudes()
         }
         catch
         {
-            // Si falla la persistencia, evitar dejar el archivo
-            // guardado sin su registro correspondiente.
             if (System.IO.File.Exists(rutaArchivo))
             {
                 System.IO.File.Delete(rutaArchivo);
@@ -427,86 +439,79 @@ public async Task<IActionResult> GetHistorialSolicitudes()
         }
     }
 
-
-    // Actualizar estado: administrador o recolector.
-    
-
-[HttpPatch("{id}/estado")]
-[Authorize(Roles = "administrador,recolector")]
-public async Task<IActionResult> ActualizarEstado(
-    int id,
-    [FromBody] ActualizarEstadoSolicitudRequest request)
-{
-    if (!ObtenerUsuarioId(out var usuarioId))
-        return Unauthorized();
-
-    if (request == null ||
-        string.IsNullOrWhiteSpace(request.Estado))
+    // ACTUALIZAR ESTADO:
+    // Exclusivamente el recolector puede modificar solicitudes.
+    // Solo puede modificar las solicitudes que le fueron notificadas.
+    [HttpPatch("{id}/estado")]
+    [Authorize(Roles = "recolector")]
+    public async Task<IActionResult> ActualizarEstado(
+        int id,
+        [FromBody] ActualizarEstadoSolicitudRequest request)
     {
-        return BadRequest(new
+        if (!ObtenerUsuarioId(out var usuarioId))
+            return Unauthorized();
+
+        if (request == null ||
+            string.IsNullOrWhiteSpace(request.Estado))
         {
-            mensaje = "Debés indicar el nuevo estado."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje = "Debés indicar el nuevo estado."
+            });
+        }
 
-    var estadosPermitidos = new[]
-    {
-        "Pendiente",
-        "Observada",
-        "En camino",
-        "Finalizada"
-    };
-
-    var estadoNuevo = estadosPermitidos.FirstOrDefault(e =>
-        e.Equals(
-            request.Estado.Trim(),
-            StringComparison.OrdinalIgnoreCase));
-
-    if (estadoNuevo == null)
-    {
-        return BadRequest(new
+        var estadosPermitidos = new[]
         {
-            mensaje = "El estado indicado no es válido.",
-            estadosPermitidos
-        });
-    }
+            "Pendiente",
+            "Observada",
+            "En camino"
+        };
 
-    var solicitud = await _context.Solicitudes
-        .FirstOrDefaultAsync(s => s.Id == id);
+        var estadoNuevo = estadosPermitidos.FirstOrDefault(e =>
+            e.Equals(
+                request.Estado.Trim(),
+                StringComparison.OrdinalIgnoreCase));
 
-    if (solicitud == null)
-    {
-        return NotFound(new
+        if (estadoNuevo == null)
         {
-            mensaje = "La solicitud no existe."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje = "El estado indicado no es válido.",
+                estadosPermitidos
+            });
+        }
 
-    // Impedir cualquier modificación si ya fue finalizada.
-    if (solicitud.Estado == "Finalizada")
-    {
-        return BadRequest(new
+        var solicitud = await _context.Solicitudes
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (solicitud == null)
         {
-            mensaje =
-                "No se puede modificar una solicitud que ya fue finalizada."
-        });
-    }
+            return NotFound(new
+            {
+                mensaje = "La solicitud no existe."
+            });
+        }
 
-    // La solicitud solo puede finalizarse mediante
-    // el endpoint que guarda la firma de conformidad.
-    if (estadoNuevo == "Finalizada")
-    {
-        return BadRequest(new
+        if (solicitud.Estado == "Finalizada")
         {
-            mensaje =
-                "Para finalizar la solicitud, el vecino debe firmar la conformidad."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje =
+                    "No se puede modificar una solicitud que ya fue finalizada."
+            });
+        }
 
-    // El recolector solo puede modificar solicitudes
-    // que le fueron notificadas.
-    if (User.IsInRole("recolector"))
-    {
+        // La finalización se realiza únicamente mediante la firma.
+        if (estadoNuevo == "Finalizada")
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "Para finalizar la solicitud, el vecino debe firmar la conformidad."
+            });
+        }
+
+        // El recolector solo puede modificar solicitudes notificadas.
         var tieneAsignacion = await _context.Notificaciones
             .AnyAsync(n =>
                 n.SolicitudId == id &&
@@ -514,48 +519,45 @@ public async Task<IActionResult> ActualizarEstado(
 
         if (!tieneAsignacion)
             return Forbid();
-    }
 
-    var estadoAnterior = solicitud.Estado;
+        var estadoAnterior = solicitud.Estado;
 
-    if (string.Equals(
-        estadoAnterior,
-        estadoNuevo,
-        StringComparison.OrdinalIgnoreCase))
-    {
-        return BadRequest(new
+        if (string.Equals(
+            estadoAnterior,
+            estadoNuevo,
+            StringComparison.OrdinalIgnoreCase))
         {
-            mensaje = "La solicitud ya tiene ese estado."
+            return BadRequest(new
+            {
+                mensaje = "La solicitud ya tiene ese estado."
+            });
+        }
+
+        solicitud.Estado = estadoNuevo;
+
+        _context.HistorialSolicitudes.Add(new HistorialSolicitud
+        {
+            SolicitudId = solicitud.Id,
+            UsuarioId = usuarioId,
+            Accion = "EstadoActualizado",
+            EstadoAnterior = estadoAnterior,
+            EstadoNuevo = estadoNuevo,
+            Fecha = DateTimeOffset.UtcNow,
+            Observacion = string.IsNullOrWhiteSpace(request.Observacion)
+                ? $"Estado cambiado de {estadoAnterior} a {estadoNuevo}."
+                : request.Observacion.Trim()
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            mensaje = "Estado actualizado correctamente.",
+            solicitudId = id,
+            estadoAnterior,
+            estadoNuevo
         });
     }
-
-    solicitud.Estado = estadoNuevo;
-
-    _context.HistorialSolicitudes.Add(new HistorialSolicitud
-    {
-        SolicitudId = solicitud.Id,
-        UsuarioId = usuarioId,
-        Accion = "EstadoActualizado",
-        EstadoAnterior = estadoAnterior,
-        EstadoNuevo = estadoNuevo,
-        Fecha = DateTimeOffset.UtcNow,
-        Observacion = string.IsNullOrWhiteSpace(request.Observacion)
-            ? $"Estado cambiado de {estadoAnterior} a {estadoNuevo}."
-            : request.Observacion.Trim()
-    });
-
-    await _context.SaveChangesAsync();
-
-    return Ok(new
-    {
-        mensaje = "Estado actualizado correctamente.",
-        solicitudId = solicitud.Id,
-        estadoAnterior,
-        estadoNuevo
-    });
-}
-
-
 }
 
 public class ActualizarEstadoSolicitudRequest
@@ -564,3 +566,4 @@ public class ActualizarEstadoSolicitudRequest
 
     public string? Observacion { get; set; }
 }
+

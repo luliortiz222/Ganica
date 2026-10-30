@@ -45,7 +45,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref} from 'vue';
+import {
+  computed,
+  onMounted,
+  onUnmounted,
+  ref
+} from 'vue';
 
 import {
   IonApp,
@@ -68,8 +73,11 @@ import {
 import { rutasNavegacion } from './navegacion';
 import { inicializarTema } from './config/tema';
 
-const rutas = rutasNavegacion;
+import {
+  iniciar_sincronizacion_automatica
+} from '@/servicies/offline_sync_service';
 
+const rutas = rutasNavegacion;
 
 function obtenerRolActual(): string {
   try {
@@ -104,6 +112,9 @@ const rutasVisibles = computed(() => {
   });
 });
 
+// Referencia para detener el evento al desmontar la aplicación.
+let detenerSincronizacion: (() => void) | null = null;
+
 onMounted(() => {
   inicializarTema();
 
@@ -114,6 +125,9 @@ onMounted(() => {
     'sesion-actualizada',
     actualizarSesion
   );
+
+  // Iniciar sincronización automática de operaciones pendientes.
+  detenerSincronizacion = iniciar_sincronizacion_automatica();
 });
 
 onUnmounted(() => {
@@ -121,6 +135,8 @@ onUnmounted(() => {
     'sesion-actualizada',
     actualizarSesion
   );
+
+  detenerSincronizacion?.();
 });
 
 </script>

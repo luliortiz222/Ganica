@@ -2,7 +2,6 @@
 import { ajax_request } from "./ajax_service";
 
 export interface CrearSolicitud {
-  servicioRecoleccionId: number;
   tipoResiduo: string;
   direccion: string;
   observaciones: string;

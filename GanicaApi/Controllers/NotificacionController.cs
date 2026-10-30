@@ -31,24 +31,46 @@ namespace GanicaApi.Controllers
         }
 
         [HttpGet("usuario/{usuarioId}")]
-        public async Task<ActionResult<IEnumerable<Notificacion>>> GetNotificaciones(
-            long usuarioId)
+public async Task<IActionResult> GetNotificaciones(long usuarioId)
+{
+    if (!ObtenerUsuarioId(out var usuarioAutenticadoId))
+        return Unauthorized();
+
+    if (!EsAdministrador() && usuarioId != usuarioAutenticadoId)
+        return Forbid();
+
+    var notificaciones = await _context.Notificaciones
+        .AsNoTracking()
+        .Where(n => n.UsuarioId == usuarioId)
+        .OrderByDescending(n => n.CreadoEn)
+        .Select(n => new
         {
-            if (!ObtenerUsuarioId(out var usuarioAutenticadoId))
-                return Unauthorized();
+            n.Id,
+            n.UsuarioId,
+            n.Titulo,
+            n.Mensaje,
+            n.Tipo,
+            n.LeidaEn,
+            n.CreadoEn,
+            n.SolicitudId,
 
-            if (!EsAdministrador() && usuarioId != usuarioAutenticadoId)
-                return Forbid();
+            // Estado actual de la solicitud relacionada.
+            EstadoSolicitud = n.Solicitud != null
+                ? n.Solicitud.Estado
+                : null,
 
-            var notificaciones = await _context.Notificaciones
-                .AsNoTracking()
-                .Where(n => n.UsuarioId == usuarioId)
-                .OrderByDescending(n => n.CreadoEn)
-                .ToListAsync();
+            TipoResiduo = n.Solicitud != null
+                ? n.Solicitud.TipoResiduo
+                : null,
 
-            return Ok(notificaciones);
-        }
+            Direccion = n.Solicitud != null
+                ? n.Solicitud.Direccion
+                : null
+        })
+        .ToListAsync();
 
+    return Ok(notificaciones);
+}
         [HttpPatch("{id}/leer")]
         public async Task<IActionResult> MarcarComoLeida(long id)
         {

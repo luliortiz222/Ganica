@@ -1,61 +1,86 @@
-import axios from 'axios';
-import { authService } from '@/servicies/auth_service';
+
+import { ajax_request } from "./ajax_service";
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
 
 export async function obtener_bandeja_notificaciones(usuarioId: number) {
     try {
-        const token = authService.obtenerToken();
-
-        console.log('Consultando notificaciones del usuario:', usuarioId);
-        console.log('Token existe:', !!token);
-
-        const response = await axios.get(
-            `http://localhost:5193/api/Notificaciones/usuario/${usuarioId}`,
+        const notificaciones = await ajax_request<any[]>(
+            `Notificaciones/usuario/${usuarioId}`,
             {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                method: "GET"
             }
         );
 
-        console.log('Notificaciones recibidas:', response.data);
-
         return {
             ok: true,
-            notificaciones: response.data,
+            notificaciones,
             mensaje: null
         };
 
     } catch (error: any) {
-        console.error('Error obteniendo notificaciones:', error);
-        console.error('Status:', error?.response?.status);
-        console.error('Respuesta:', error?.response?.data);
+        console.error("Error obteniendo notificaciones:", error);
 
         return {
             ok: false,
             notificaciones: [],
-            mensaje: 'Error al cargar la bandeja.'
+            mensaje: "Error al cargar la bandeja."
         };
     }
 }
 
 export async function marcar_notificacion_leida(id: number) {
     try {
-        const token = authService.obtenerToken();
-
-        await axios.patch(
-            `http://localhost:5193/api/Notificaciones/${id}/leer`,
-            {},
+        await ajax_request(
+            `Notificaciones/${id}/leer`,
             {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                method: "PATCH",
+                body: JSON.stringify({})
             }
         );
 
         return { ok: true };
 
     } catch (error) {
-        console.error('Error marcando notificación:', error);
+        console.error("Error marcando notificación:", error);
         return { ok: false };
     }
+}
+
+export async function notificar_evento_local(
+    titulo: string,
+    mensaje: string
+) {
+    if (!Capacitor.isPluginAvailable("LocalNotifications")) {
+        return {
+            ok: false,
+            mensaje: "Notificaciones locales no disponibles."
+        };
+    }
+
+    const permisos = await LocalNotifications.checkPermissions();
+
+    if (permisos.display !== "granted") {
+        const solicitados = await LocalNotifications.requestPermissions();
+
+        if (solicitados.display !== "granted") {
+            return {
+                ok: false,
+                mensaje: "Sin permiso de notificaciones."
+            };
+        }
+    }
+
+    await LocalNotifications.schedule({
+        notifications: [{
+            id: Date.now() % 2147483647,
+            title: titulo,
+            body: mensaje,
+            schedule: {
+                at: new Date(Date.now() + 250)
+            }
+        }]
+    });
+
+    return { ok: true, mensaje: null };
 }
