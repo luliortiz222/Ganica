@@ -1,3 +1,4 @@
+
 using GanicaApi.Models;
 
 namespace GanicaApi.Data;
@@ -6,13 +7,13 @@ public static class DbInitializer
 {
     public static void Seed(ApplicationDbContext context)
     {
-        // Borramos todo lo viejo para asegurar que queden solo los 3 correctos
+        // Si ya existen servicios, no modificamos ni eliminamos ninguno.
         if (context.ServiciosRecoleccion.Any())
         {
-            context.ServiciosRecoleccion.RemoveRange(context.ServiciosRecoleccion);
-            context.SaveChanges();
+            return;
         }
 
+        // Servicios iniciales
         var servicios = new ServicioRecoleccion[]
         {
             new ServicioRecoleccion
@@ -42,6 +43,6 @@ public static class DbInitializer
         };
 
         context.ServiciosRecoleccion.AddRange(servicios);
-         context.SaveChanges(); 
-         } 
-         }
+        context.SaveChanges();
+    }
+}

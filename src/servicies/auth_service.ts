@@ -1,6 +1,3 @@
-
-
-
 import { obtener_api_url } from '@/config/debug';
 
 export interface LoginRequest {

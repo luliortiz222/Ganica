@@ -61,3 +61,28 @@ export async function eliminar_servicio_api(
     throw error;
   }
 }
+
+// GET: Obtener servicios disponibles para solicitudes de vecinos
+export async function obtener_servicios_solicitables_api(): Promise<Servicio[]> {
+  try {
+    const servicios = await obtener_servicios_api();
+
+    return servicios.filter(servicio => {
+      const datos = servicio as any;
+
+      const requiereSolicitud =
+        datos.requiere_solicitud ??
+        datos.requiereSolicitud ??
+        false;
+
+      return requiereSolicitud === true ||
+             requiereSolicitud === 1;
+    });
+  } catch (error) {
+    console.error(
+      "Error al obtener servicios solicitables:",
+      error
+    );
+    throw error;
+  }
+}

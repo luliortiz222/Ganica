@@ -9,7 +9,7 @@ function construir_url(endpoint: string): string {
     throw new Error("No se configuró la URL de la API.");
   }
 
-  return `${api_url}/${String(endpoint).replace(/^\/+/, "")}`;
+  return `${api_url.replace(/\/+$/, "")}/${String(endpoint).replace(/^\/+/, "")}`;
 }
 
 export async function ajax_request<T = any>(
@@ -72,8 +72,8 @@ export async function ajax_request<T = any>(
       signal: controller.signal,
       headers: {
         ...headers,
-        ...fetchOptions.headers,
-      },
+        ...fetchOptions.headers
+      }
     });
 
     if (!response.ok) {
@@ -81,7 +81,6 @@ export async function ajax_request<T = any>(
       let mensajeError = `Error HTTP: ${response.status}`;
 
       try {
-
         const errorData = await response.json();
 
         if (errorData?.mensaje) {
@@ -91,12 +90,22 @@ export async function ajax_request<T = any>(
         }
 
       } catch {
+        // La respuesta no contenía JSON.
       }
 
       throw new Error(mensajeError);
     }
 
-    const datos = await response.json();
+    // Algunas respuestas pueden no contener cuerpo.
+    const textoRespuesta = await response.text();
+
+    let datos: T;
+
+    if (textoRespuesta.trim()) {
+      datos = JSON.parse(textoRespuesta) as T;
+    } else {
+      datos = {} as T;
+    }
 
     if (guardable) {
       offline_store.guardar_copia(endpoint, datos);
@@ -108,7 +117,7 @@ export async function ajax_request<T = any>(
 
     /*
      * Si la petición se puede encolar y falló por
-     * falta de conexión, la guardamos para enviarla después.
+     * falta de conexión o tiempo de espera, la guardamos.
      */
     if (
       encolable &&
@@ -151,7 +160,6 @@ export async function ajax_request<T = any>(
     }
 
     if (error?.name === "AbortError") {
-
       throw new Error(
         "Tiempo de espera agotado. El servidor no responde."
       );
@@ -160,8 +168,6 @@ export async function ajax_request<T = any>(
     throw error;
 
   } finally {
-
     clearTimeout(timeoutId);
-
   }
 }

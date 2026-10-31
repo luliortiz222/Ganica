@@ -26,6 +26,42 @@
         <ion-card class="app-card">
           <ion-card-content>
             <form class="app-formulario" @submit.prevent="enviarSolicitud">
+
+              <!-- SERVICIO DE RECOLECCIÓN -->
+              <ion-item lines="full">
+                <ion-select
+                  v-model="form.servicioRecoleccionId"
+                  label="Servicio de Recolección"
+                  label-placement="stacked"
+                  placeholder="Seleccione un servicio"
+                  :disabled="cargandoServicios || serviciosSolicitables.length === 0"
+                  required
+                >
+                  <ion-select-option
+                    v-for="servicio in serviciosSolicitables"
+                    :key="servicio.id"
+                    :value="Number(servicio.id)"
+                  >
+                    {{ servicio.nombre }}
+                  </ion-select-option>
+                </ion-select>
+              </ion-item>
+
+              <ion-note
+                v-if="cargandoServicios"
+                color="medium"
+              >
+                Cargando servicios disponibles...
+              </ion-note>
+
+              <ion-note
+                v-else-if="serviciosSolicitables.length === 0"
+                color="warning"
+              >
+                No hay servicios disponibles para solicitar.
+              </ion-note>
+
+              <!-- TIPO DE RESIDUO -->
               <ion-item lines="full">
                 <ion-select
                   v-model="form.tipo"
@@ -48,6 +84,7 @@
                 </ion-select>
               </ion-item>
 
+              <!-- DIRECCIÓN -->
               <ion-item lines="full">
                 <ion-input
                   v-model="form.direccion"
@@ -59,6 +96,7 @@
                 />
               </ion-item>
 
+              <!-- UBICACIÓN -->
               <ion-button
                 expand="block"
                 fill="outline"
@@ -88,6 +126,7 @@
                 </p>
               </ion-note>
 
+              <!-- OBSERVACIONES -->
               <ion-item lines="full">
                 <ion-textarea
                   v-model="form.observaciones"
@@ -98,6 +137,7 @@
                 />
               </ion-item>
 
+              <!-- RECONOCIMIENTO DE VOZ -->
               <ion-button
                 expand="block"
                 fill="outline"
@@ -114,12 +154,17 @@
                 }}
               </ion-button>
 
+              <!-- ENVIAR -->
               <ion-button
                 expand="block"
                 type="submit"
                 color="primary"
                 class="app-boton ion-margin-top"
-                :disabled="enviandoSolicitud"
+                :disabled="
+                  enviandoSolicitud ||
+                  cargandoServicios ||
+                  serviciosSolicitables.length === 0
+                "
               >
                 <ion-icon :icon="sendOutline" slot="start" />
                 {{ enviandoSolicitud ? 'Enviando...' : 'Enviar Solicitud' }}
@@ -128,6 +173,7 @@
           </ion-card-content>
         </ion-card>
 
+        <!-- MIS SOLICITUDES -->
         <div class="encabezado-solicitudes">
           <h3 class="app-seccion-titulo">Mis Solicitudes</h3>
 
@@ -208,7 +254,7 @@
         </ion-list>
       </template>
 
-      <!-- ADMINISTRADOR: SOLAMENTE CONSULTA LAS SOLICITUDES -->
+      <!-- ADMINISTRADOR -->
       <template v-else-if="esAdministrador">
         <div class="encabezado-solicitudes">
           <div>
@@ -313,7 +359,7 @@
         </ion-list>
       </template>
 
-      <!-- RECOLECTOR: CONSULTA Y MODIFICA SOLICITUDES NOTIFICADAS -->
+      <!-- RECOLECTOR -->
       <template v-else-if="esRecolector">
         <div class="encabezado-solicitudes">
           <div>
@@ -507,6 +553,12 @@ import {
 
 import type { SolicitudApi } from '@/servicies/solicitudes_service';
 
+import {
+  obtener_servicios_solicitables_api
+} from '@/servicies/servicios_service';
+
+import type { Servicio } from '@/stores/servicios_store';
+
 import { dictar_texto } from '@/servicies/voz_service';
 import { ESTADOS_SOLICITUD } from '@/utils/estados';
 
@@ -519,12 +571,16 @@ interface Ubicacion {
 const INTERVALO_ACTUALIZACION_MS = 5000;
 
 const form = ref({
+  servicioRecoleccionId: null as number | null,
   tipo: '',
   direccion: '',
   observaciones: '',
   latitud: null as number | null,
   longitud: null as number | null
 });
+
+const serviciosSolicitables = ref<Servicio[]>([]);
+const cargandoServicios = ref(false);
 
 const obtenerRol = (): string => {
   try {
@@ -616,19 +672,6 @@ const formatearFecha = (fecha: unknown): string => {
   return valor.toLocaleDateString('es-AR');
 };
 
-const aplicarUbicacion = (ubicacion: Ubicacion) => {
-  if (!esVecino.value) return;
-
-  form.value.direccion = ubicacion.direccion;
-  form.value.latitud = ubicacion.latitud;
-  form.value.longitud = ubicacion.longitud;
-};
-
-const limpiarCoordenadas = () => {
-  form.value.latitud = null;
-  form.value.longitud = null;
-};
-
 const mostrarToast = async (
   mensaje: string,
   color: 'success' | 'warning' | 'danger'
@@ -641,6 +684,40 @@ const mostrarToast = async (
   });
 
   await toast.present();
+};
+
+// VECINO: cargar únicamente los servicios que requieren solicitud.
+const cargarServiciosSolicitables = async () => {
+  if (!esVecino.value || cargandoServicios.value) return;
+
+  cargandoServicios.value = true;
+
+  try {
+    serviciosSolicitables.value =
+      await obtener_servicios_solicitables_api();
+  } catch (error) {
+    console.error('Error al cargar servicios solicitables:', error);
+
+    await mostrarToast(
+      'No se pudieron cargar los servicios disponibles.',
+      'warning'
+    );
+  } finally {
+    cargandoServicios.value = false;
+  }
+};
+
+const aplicarUbicacion = (ubicacion: Ubicacion) => {
+  if (!esVecino.value) return;
+
+  form.value.direccion = ubicacion.direccion;
+  form.value.latitud = ubicacion.latitud;
+  form.value.longitud = ubicacion.longitud;
+};
+
+const limpiarCoordenadas = () => {
+  form.value.latitud = null;
+  form.value.longitud = null;
 };
 
 const dictarObservaciones = async () => {
@@ -820,7 +897,10 @@ const hacerRecarga = async (event: CustomEvent) => {
     actualizarRol();
 
     if (esVecino.value) {
-      await cargarSolicitudesVecino();
+      await Promise.all([
+        cargarServiciosSolicitables(),
+        cargarSolicitudesVecino()
+      ]);
     } else if (esAdministrador.value) {
       await cargarSolicitudesAdministrador();
     } else if (esRecolector.value) {
@@ -833,6 +913,7 @@ const hacerRecarga = async (event: CustomEvent) => {
 
 const limpiarFormulario = () => {
   form.value = {
+    servicioRecoleccionId: null,
     tipo: '',
     direccion: '',
     observaciones: '',
@@ -853,9 +934,13 @@ const enviarSolicitud = async () => {
 
   if (enviandoSolicitud.value) return;
 
-  if (!form.value.tipo || !form.value.direccion.trim()) {
+  if (
+    !form.value.servicioRecoleccionId ||
+    !form.value.tipo ||
+    !form.value.direccion.trim()
+  ) {
     await mostrarToast(
-      'Completá el tipo de residuo y la dirección.',
+      'Seleccioná un servicio, el tipo de residuo y completá la dirección.',
       'warning'
     );
     return;
@@ -865,6 +950,7 @@ const enviarSolicitud = async () => {
 
   try {
     const datosSolicitud = {
+      servicioRecoleccionId: Number(form.value.servicioRecoleccionId),
       tipoResiduo: form.value.tipo,
       direccion: form.value.direccion.trim(),
       observaciones: form.value.observaciones,
@@ -918,6 +1004,7 @@ onIonViewWillEnter(() => {
   actualizarRol();
 
   if (esVecino.value) {
+    void cargarServiciosSolicitables();
     void cargarSolicitudesVecino();
   } else if (esAdministrador.value) {
     void cargarSolicitudesAdministrador();
@@ -1048,3 +1135,4 @@ ion-badge {
   font-weight: 650;
 }
 </style>
+

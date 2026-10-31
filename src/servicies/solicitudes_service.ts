@@ -2,6 +2,7 @@
 import { ajax_request } from "./ajax_service";
 
 export interface CrearSolicitud {
+  servicioRecoleccionId: number;
   tipoResiduo: string;
   direccion: string;
   observaciones: string;
@@ -20,7 +21,7 @@ export interface SolicitudApi {
   latitud?: number | null;
   longitud?: number | null;
 
-  // Datos de la firma de conformidad
+  // Datos de la firma de conformidad.
   firmaConformidadArchivo?: string | null;
   firmaConformidadFecha?: string | null;
 }
@@ -64,7 +65,8 @@ export async function crear_solicitud_api(
   });
 }
 
-export async function listar_solicitudes_api(): Promise<SolicitudApi[]> {
+export async function listar_solicitudes_api():
+  Promise<SolicitudApi[]> {
   return await ajax_request<SolicitudApi[]>("Solicitudes", {
     method: "GET"
   });

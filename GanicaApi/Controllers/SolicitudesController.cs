@@ -1,4 +1,3 @@
-
 using System.Security.Claims;
 using GanicaApi.Data;
 using GanicaApi.Models;
@@ -70,157 +69,142 @@ public class SolicitudesController : ControllerBase
         return Forbid();
     }
 
-    // CREAR SOLICITUD:
-    // Exclusivamente el vecino.
-    [HttpPost]
-    [Authorize(Roles = "vecino")]
-    public async Task<ActionResult<Solicitud>> PostSolicitud(
-        [FromBody] Solicitud solicitud)
+   
+// CREAR SOLICITUD:
+// Exclusivamente el vecino.
+[HttpPost]
+[Authorize(Roles = "vecino")]
+public async Task<ActionResult<Solicitud>> PostSolicitud(
+    [FromBody] Solicitud solicitud)
+{
+    if (!ObtenerUsuarioId(out var usuarioId))
+        return Unauthorized();
+
+    if (solicitud == null)
     {
-        if (!ObtenerUsuarioId(out var usuarioId))
-            return Unauthorized();
-
-        if (solicitud == null)
+        return BadRequest(new
         {
-            return BadRequest(new
-            {
-                mensaje = "Los datos de la solicitud son obligatorios."
-            });
-        }
-
-        if (string.IsNullOrWhiteSpace(solicitud.TipoResiduo))
-        {
-            return BadRequest(new
-            {
-                mensaje = "Debés indicar el tipo de residuo."
-            });
-        }
-
-        if (string.IsNullOrWhiteSpace(solicitud.Direccion))
-        {
-            return BadRequest(new
-            {
-                mensaje = "Debés indicar la dirección de recolección."
-            });
-        }
-
-        var servicio = await _context.ServiciosRecoleccion
-            .FirstOrDefaultAsync(s => s.RequiereSolicitud);
-
-        if (servicio == null)
-        {
-            return BadRequest(new
-            {
-                mensaje = "No existe un servicio habilitado para solicitudes."
-            });
-        }
-
-        // Validar tipos de residuos permitidos.
-        var tiposPermitidos = new[]
-        {
-            "Poda y Escombros",
-            "Electrodomésticos-Voluminosos",
-            "Aceite Vegetal Usado"
-        };
-
-        var tipoResiduo = tiposPermitidos.FirstOrDefault(t =>
-            t.Equals(
-                solicitud.TipoResiduo.Trim(),
-                StringComparison.OrdinalIgnoreCase));
-
-        if (tipoResiduo == null)
-        {
-            return BadRequest(new
-            {
-                mensaje = "El tipo de residuo indicado no es válido.",
-                tiposPermitidos
-            });
-        }
-
-        solicitud.TipoResiduo = tipoResiduo;
-        solicitud.ServicioRecoleccionId = servicio.Id;
-        solicitud.FechaCreacion = DateTime.Now;
-        solicitud.Estado = "Pendiente";
-
-        // El UsuarioId siempre se obtiene del token.
-        solicitud.UsuarioId = usuarioId;
-
-        // Evitar asignaciones de navegación enviadas por el cliente.
-        solicitud.Usuario = null;
-        solicitud.ServicioRecoleccion = null;
-
-        _context.Solicitudes.Add(solicitud);
-        await _context.SaveChangesAsync();
-
-        // Registrar creación en el historial.
-        _context.HistorialSolicitudes.Add(new HistorialSolicitud
-        {
-            SolicitudId = solicitud.Id,
-            UsuarioId = usuarioId,
-            Accion = "Creada",
-            EstadoAnterior = null,
-            EstadoNuevo = solicitud.Estado,
-            Fecha = DateTimeOffset.UtcNow,
-            Observacion = "Solicitud de recolección creada por un vecino."
+            mensaje = "Los datos de la solicitud son obligatorios."
         });
-
-        // Buscar administradores activos.
-        var administradores = await _context.Usuarios
-            .Include(u => u.Rol)
-            .Where(u =>
-                u.Activo &&
-                u.Rol != null &&
-                u.Rol.Codigo == "administrador")
-            .ToListAsync();
-
-        // Notificar a todos los administradores activos.
-        foreach (var administrador in administradores)
-        {
-            _context.Notificaciones.Add(new Notificacion
-            {
-                UsuarioId = administrador.Id,
-                SolicitudId = solicitud.Id,
-                Titulo = "Nueva solicitud de un vecino",
-                Mensaje =
-                    $"Un vecino generó una solicitud de {solicitud.TipoResiduo}. " +
-                    $"Dirección: {solicitud.Direccion}. " +
-                    $"Observaciones: {solicitud.Observaciones}",
-                Tipo = TipoNotificacion.Entrega,
-                CreadoEn = DateTimeOffset.UtcNow
-            });
-        }
-
-        // Buscar recolectores activos.
-        var recolectores = await _context.Usuarios
-            .Include(u => u.Rol)
-            .Where(u =>
-                u.Activo &&
-                u.Rol != null &&
-                u.Rol.Codigo == "recolector")
-            .ToListAsync();
-
-        // Notificar a todos los recolectores activos.
-        foreach (var recolector in recolectores)
-        {
-            _context.Notificaciones.Add(new Notificacion
-            {
-                UsuarioId = recolector.Id,
-                SolicitudId = solicitud.Id,
-                Titulo = "Nueva solicitud de recolección",
-                Mensaje =
-                    $"Tenés una nueva tarea: {solicitud.TipoResiduo}. " +
-                    $"Dirección: {solicitud.Direccion}. " +
-                    $"Observaciones: {solicitud.Observaciones}",
-                Tipo = TipoNotificacion.Entrega,
-                CreadoEn = DateTimeOffset.UtcNow
-            });
-        }
-
-        // Guardar historial y todas las notificaciones.
-        await _context.SaveChangesAsync();
-
-        return Ok(solicitud);
     }
+
+    if (solicitud.ServicioRecoleccionId <= 0)
+    {
+        return BadRequest(new
+        {
+            mensaje = "Debés seleccionar un servicio de recolección."
+        });
+    }
+
+    if (string.IsNullOrWhiteSpace(solicitud.Direccion))
+    {
+        return BadRequest(new
+        {
+            mensaje = "Debés indicar la dirección de recolección."
+        });
+    }
+
+    // Buscar el servicio seleccionado por el vecino.
+    // Solamente se permiten servicios que requieren solicitud.
+    var servicio = await _context.ServiciosRecoleccion
+        .FirstOrDefaultAsync(s =>
+            s.Id == solicitud.ServicioRecoleccionId &&
+            s.RequiereSolicitud);
+
+    if (servicio == null)
+    {
+        return BadRequest(new
+        {
+            mensaje = "El servicio seleccionado no existe o no está habilitado para solicitudes."
+        });
+    }
+
+    // El tipo de residuo se obtiene del servicio seleccionado.
+    solicitud.TipoResiduo = servicio.Nombre;
+    solicitud.ServicioRecoleccionId = servicio.Id;
+    solicitud.FechaCreacion = DateTime.Now;
+    solicitud.Estado = "Pendiente";
+
+    // El UsuarioId siempre se obtiene del token.
+    solicitud.UsuarioId = usuarioId;
+
+    // Evitar asignaciones de navegación enviadas por el cliente.
+    solicitud.Usuario = null;
+    solicitud.ServicioRecoleccion = null;
+
+    _context.Solicitudes.Add(solicitud);
+    await _context.SaveChangesAsync();
+
+    // Registrar creación en el historial.
+    _context.HistorialSolicitudes.Add(new HistorialSolicitud
+    {
+        SolicitudId = solicitud.Id,
+        UsuarioId = usuarioId,
+        Accion = "Creada",
+        EstadoAnterior = null,
+        EstadoNuevo = solicitud.Estado,
+        Fecha = DateTimeOffset.UtcNow,
+        Observacion = "Solicitud de recolección creada por un vecino."
+    });
+
+    // Buscar administradores activos.
+    var administradores = await _context.Usuarios
+        .Include(u => u.Rol)
+        .Where(u =>
+            u.Activo &&
+            u.Rol != null &&
+            u.Rol.Codigo == "administrador")
+        .ToListAsync();
+
+    // Notificar a todos los administradores activos.
+    foreach (var administrador in administradores)
+    {
+        _context.Notificaciones.Add(new Notificacion
+        {
+            UsuarioId = administrador.Id,
+            SolicitudId = solicitud.Id,
+            Titulo = "Nueva solicitud de un vecino",
+            Mensaje =
+                $"Un vecino generó una solicitud de {solicitud.TipoResiduo}. " +
+                $"Dirección: {solicitud.Direccion}. " +
+                $"Observaciones: {solicitud.Observaciones}",
+            Tipo = TipoNotificacion.Entrega,
+            CreadoEn = DateTimeOffset.UtcNow
+        });
+    }
+
+    // Buscar recolectores activos.
+    var recolectores = await _context.Usuarios
+        .Include(u => u.Rol)
+        .Where(u =>
+            u.Activo &&
+            u.Rol != null &&
+            u.Rol.Codigo == "recolector")
+        .ToListAsync();
+
+    // Notificar a todos los recolectores activos.
+    foreach (var recolector in recolectores)
+    {
+        _context.Notificaciones.Add(new Notificacion
+        {
+            UsuarioId = recolector.Id,
+            SolicitudId = solicitud.Id,
+            Titulo = "Nueva solicitud de recolección",
+            Mensaje =
+                $"Tenés una nueva tarea: {solicitud.TipoResiduo}. " +
+                $"Dirección: {solicitud.Direccion}. " +
+                $"Observaciones: {solicitud.Observaciones}",
+            Tipo = TipoNotificacion.Entrega,
+            CreadoEn = DateTimeOffset.UtcNow
+        });
+    }
+
+    // Guardar historial y todas las notificaciones.
+    await _context.SaveChangesAsync();
+
+    return Ok(solicitud);
+}
+
 
     // CONSULTAR HISTORIAL:
     // Administrador: todo el historial.

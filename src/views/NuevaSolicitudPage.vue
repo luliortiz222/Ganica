@@ -1,4 +1,3 @@
-
 <template>
   <ion-page>
     <ion-header>
@@ -21,28 +20,63 @@
       <ion-card class="app-card">
         <ion-card-content>
           <form class="app-formulario" @submit.prevent="enviarSolicitud">
+
+            <!-- SERVICIOS DISPONIBLES -->
             <ion-item lines="full">
               <ion-select
-                v-model="form.tipo"
-                label="Tipo de residuo especial"
+                v-model="form.servicioRecoleccionId"
+                label="Servicio de recolección"
                 label-placement="stacked"
-                placeholder="Seleccioná una opción"
+                placeholder="Seleccioná un servicio"
+                :disabled="
+                  serviciosCargando ||
+                  serviciosDisponibles.length === 0 ||
+                  enviando
+                "
                 required
               >
-                <ion-select-option value="Poda y Escombros">
-                  Poda y Escombros
-                </ion-select-option>
-
-                <ion-select-option value="Electrodomésticos-Voluminosos">
-                  Electrodomésticos y voluminosos
-                </ion-select-option>
-
-                <ion-select-option value="Aceite Vegetal Usado">
-                  Aceite vegetal usado
+                <ion-select-option
+                  v-for="servicio in serviciosDisponibles"
+                  :key="servicio.id"
+                  :value="Number(servicio.id)"
+                >
+                  {{ servicio.nombre || servicio.titulo || 'Servicio sin nombre' }}
                 </ion-select-option>
               </ion-select>
             </ion-item>
 
+            <ion-note v-if="serviciosCargando" color="medium">
+              Cargando servicios disponibles...
+            </ion-note>
+
+            <ion-note
+              v-else-if="serviciosDisponibles.length === 0"
+              color="warning"
+            >
+              No hay servicios habilitados para solicitudes en este momento.
+            </ion-note>
+
+            <!-- INFORMACIÓN DEL SERVICIO -->
+            <ion-item
+              v-if="servicioSeleccionado"
+              lines="none"
+            >
+              <ion-label class="ion-text-wrap">
+                <p v-if="servicioSeleccionado.descripcion">
+                  {{ servicioSeleccionado.descripcion }}
+                </p>
+
+                <p v-if="servicioSeleccionado.dias">
+                  Días: {{ servicioSeleccionado.dias }}
+                </p>
+
+                <p v-if="servicioSeleccionado.horario">
+                  Horario: {{ servicioSeleccionado.horario }}
+                </p>
+              </ion-label>
+            </ion-item>
+
+            <!-- DIRECCIÓN -->
             <ion-item lines="full">
               <ion-input
                 v-model="form.direccion"
@@ -54,6 +88,7 @@
               />
             </ion-item>
 
+            <!-- UBICACIÓN EN EL MAPA -->
             <ion-button
               expand="block"
               fill="outline"
@@ -73,14 +108,17 @@
                 <ion-icon :icon="checkmarkCircleOutline" />
                 Ubicación seleccionada
               </p>
+
               <p class="coordenadas">
                 Latitud: {{ form.latitud.toFixed(6) }}
               </p>
+
               <p class="coordenadas">
                 Longitud: {{ form.longitud.toFixed(6) }}
               </p>
             </ion-note>
 
+            <!-- OBSERVACIONES -->
             <ion-item lines="full">
               <ion-textarea
                 v-model="form.observaciones"
@@ -91,6 +129,7 @@
               />
             </ion-item>
 
+            <!-- DICTADO POR VOZ -->
             <ion-button
               expand="block"
               fill="outline"
@@ -103,19 +142,26 @@
               {{ escuchandoVoz ? 'Escuchando...' : 'Dictar observaciones' }}
             </ion-button>
 
+            <!-- ENVIAR -->
             <ion-button
               expand="block"
               type="submit"
               class="ion-margin-top"
-              :disabled="enviando"
+              :disabled="
+                enviando ||
+                serviciosCargando ||
+                serviciosDisponibles.length === 0
+              "
             >
               <ion-icon :icon="sendOutline" slot="start" />
               {{ enviando ? 'Enviando...' : 'Enviar solicitud' }}
             </ion-button>
+
           </form>
         </ion-card-content>
       </ion-card>
 
+      <!-- MIS SOLICITUDES -->
       <h2 class="app-seccion-titulo">Mis solicitudes</h2>
 
       <ion-note v-if="cargando" color="medium">
@@ -136,7 +182,9 @@
           class="app-lista-item"
         >
           <ion-label class="ion-text-wrap">
-            <h2><strong>{{ item.tipoResiduo }}</strong></h2>
+            <h2>
+              <strong>{{ item.tipoResiduo }}</strong>
+            </h2>
 
             <p>📍 {{ item.direccion }}</p>
 
@@ -184,6 +232,7 @@
       </ion-list>
     </ion-content>
 
+    <!-- MODAL DE UBICACIÓN -->
     <SelectorUbicacion
       :abierto="modalUbicacionAbierto"
       :direccion-inicial="form.direccion"
@@ -193,6 +242,7 @@
       @cerrar="modalUbicacionAbierto = false"
     />
 
+    <!-- MODAL DE FIRMA -->
     <FirmaConformidad
       v-if="solicitudParaFirma"
       :abierto="modalFirmaAbierto"
@@ -206,7 +256,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 import {
   IonPage,
@@ -252,7 +302,18 @@ import type {
   SolicitudApi
 } from '@/servicies/solicitudes_service';
 
-import { dictar_texto } from '@/servicies/voz_service';
+import {
+  obtener_servicios_solicitables_api
+} from '@/servicies/servicios_service';
+
+import type {
+  Servicio
+} from '@/stores/servicios_store';
+
+import {
+  dictar_texto
+} from '@/servicies/voz_service';
+
 
 interface Ubicacion {
   direccion: string;
@@ -279,25 +340,47 @@ interface SolicitudConFirma extends SolicitudApi {
   firmaConformidadFecha?: string | null;
 }
 
+
 const CLAVE_LOCAL = 'ganica_solicitudes_vecino';
 
+
+// FORMULARIO
 const form = ref({
-  tipo: '',
+  servicioRecoleccionId: 0,
   direccion: '',
   observaciones: '',
   latitud: null as number | null,
   longitud: null as number | null
 });
 
+
+// SERVICIOS
+const serviciosDisponibles = ref<Servicio[]>([]);
+const serviciosCargando = ref(false);
+
+const servicioSeleccionado = computed(() => {
+  return serviciosDisponibles.value.find(
+    servicio =>
+      Number(servicio.id) ===
+      Number(form.value.servicioRecoleccionId)
+  ) ?? null;
+});
+
+
+// SOLICITUDES
 const misSolicitudes = ref<SolicitudApi[]>([]);
 const cargando = ref(false);
 const enviando = ref(false);
 const escuchandoVoz = ref(false);
-const modalUbicacionAbierto = ref(false);
 
+
+// MODALES
+const modalUbicacionAbierto = ref(false);
 const solicitudParaFirma = ref<SolicitudApi | null>(null);
 const modalFirmaAbierto = ref(false);
 
+
+// TOAST
 const mostrarToast = async (
   mensaje: string,
   color: 'success' | 'warning' | 'danger'
@@ -312,6 +395,48 @@ const mostrarToast = async (
   await toast.present();
 };
 
+
+// CARGAR SERVICIOS
+const cargarServicios = async () => {
+  serviciosCargando.value = true;
+
+  try {
+    const servicios = await obtener_servicios_solicitables_api();
+
+    serviciosDisponibles.value = Array.isArray(servicios)
+      ? servicios.filter(servicio =>
+          servicio.requiere_solicitud === true
+        )
+      : [];
+
+    // Verificar que la selección siga disponible.
+    const existeSeleccion = serviciosDisponibles.value.some(
+      servicio =>
+        Number(servicio.id) ===
+        Number(form.value.servicioRecoleccionId)
+    );
+
+    if (!existeSeleccion) {
+      form.value.servicioRecoleccionId = 0;
+    }
+
+  } catch (error) {
+    console.error('Error al cargar servicios:', error);
+
+    serviciosDisponibles.value = [];
+
+    await mostrarToast(
+      'No se pudieron cargar los servicios de recolección.',
+      'warning'
+    );
+
+  } finally {
+    serviciosCargando.value = false;
+  }
+};
+
+
+// LEER SOLICITUDES LOCALES
 const leerSolicitudesLocales = (): SolicitudLocal[] => {
   try {
     const datos = localStorage.getItem(CLAVE_LOCAL);
@@ -320,13 +445,22 @@ const leerSolicitudesLocales = (): SolicitudLocal[] => {
 
     const solicitudes = JSON.parse(datos);
 
-    return Array.isArray(solicitudes) ? solicitudes : [];
+    return Array.isArray(solicitudes)
+      ? solicitudes
+      : [];
+
   } catch (error) {
-    console.error('Error al leer solicitudes locales:', error);
+    console.error(
+      'Error al leer solicitudes locales:',
+      error
+    );
+
     return [];
   }
 };
 
+
+// GUARDAR SOLICITUDES LOCALES
 const guardarSolicitudesLocales = (
   solicitudes: SolicitudLocal[]
 ) => {
@@ -336,6 +470,8 @@ const guardarSolicitudesLocales = (
   );
 };
 
+
+// GUARDAR SOLICITUD PENDIENTE
 const guardarPendienteLocal = (
   solicitud: SolicitudLocal
 ) => {
@@ -346,17 +482,23 @@ const guardarPendienteLocal = (
   guardarSolicitudesLocales(guardadas);
 };
 
+
+// APLICAR UBICACIÓN DEL MAPA
 const aplicarUbicacion = (ubicacion: Ubicacion) => {
   form.value.direccion = ubicacion.direccion;
   form.value.latitud = ubicacion.latitud;
   form.value.longitud = ubicacion.longitud;
 };
 
+
+// LIMPIAR COORDENADAS
 const limpiarCoordenadas = () => {
   form.value.latitud = null;
   form.value.longitud = null;
 };
 
+
+// DICTADO POR VOZ
 const dictarObservaciones = async () => {
   if (escuchandoVoz.value || enviando.value) return;
 
@@ -377,8 +519,12 @@ const dictarObservaciones = async () => {
         'success'
       );
     }
+
   } catch (error) {
-    console.error('Error al dictar observaciones:', error);
+    console.error(
+      'Error al dictar observaciones:',
+      error
+    );
 
     await mostrarToast(
       error instanceof Error
@@ -386,11 +532,14 @@ const dictarObservaciones = async () => {
         : 'No se pudo utilizar el reconocimiento de voz.',
       'warning'
     );
+
   } finally {
     escuchandoVoz.value = false;
   }
 };
 
+
+// CONVERTIR SOLICITUD LOCAL A FORMATO API
 const convertirSolicitudLocal = (
   solicitud: SolicitudLocal
 ): SolicitudApi => {
@@ -404,11 +553,15 @@ const convertirSolicitudLocal = (
     estado: solicitud.estado,
     latitud: solicitud.latitud,
     longitud: solicitud.longitud,
-    firmaConformidadArchivo: solicitud.firmaConformidadArchivo ?? null,
-    firmaConformidadFecha: solicitud.firmaConformidadFecha ?? null
+    firmaConformidadArchivo:
+      solicitud.firmaConformidadArchivo ?? null,
+    firmaConformidadFecha:
+      solicitud.firmaConformidadFecha ?? null
   };
 };
 
+
+// CARGAR MIS SOLICITUDES
 const cargarMisSolicitudes = async () => {
   cargando.value = true;
 
@@ -429,20 +582,27 @@ const cargarMisSolicitudes = async () => {
       ...localesNoDuplicadas.map(convertirSolicitudLocal),
       ...remotas
     ];
+
   } catch (error) {
-    console.error('Error al cargar solicitudes:', error);
+    console.error(
+      'Error al cargar solicitudes:',
+      error
+    );
 
     misSolicitudes.value = locales.map(
       convertirSolicitudLocal
     );
+
   } finally {
     cargando.value = false;
   }
 };
 
+
+// LIMPIAR FORMULARIO
 const limpiarFormulario = () => {
   form.value = {
-    tipo: '',
+    servicioRecoleccionId: 0,
     direccion: '',
     observaciones: '',
     latitud: null,
@@ -450,21 +610,65 @@ const limpiarFormulario = () => {
   };
 };
 
+
+// ENVIAR SOLICITUD
 const enviarSolicitud = async () => {
   if (enviando.value) return;
 
-  if (!form.value.tipo || !form.value.direccion.trim()) {
+  const servicio = servicioSeleccionado.value;
+
+  // Validar servicio.
+  if (!servicio) {
     await mostrarToast(
-      'Completá el tipo de residuo y la dirección.',
+      'Seleccioná un servicio de recolección.',
       'warning'
     );
+
+    return;
+  }
+
+  const servicioId = Number(servicio.id);
+
+  if (!Number.isInteger(servicioId) || servicioId <= 0) {
+    await mostrarToast(
+      'El servicio seleccionado no tiene un identificador válido.',
+      'warning'
+    );
+
+    return;
+  }
+
+  // Validar dirección.
+  if (!form.value.direccion.trim()) {
+    await mostrarToast(
+      'Debés indicar la dirección de recolección.',
+      'warning'
+    );
+
+    return;
+  }
+
+  // Obtener nombre del servicio.
+  const nombreServicio = String(
+    servicio.nombre ?? servicio.titulo ?? ''
+  ).trim();
+
+  if (!nombreServicio) {
+    await mostrarToast(
+      'El servicio seleccionado no tiene un nombre válido.',
+      'warning'
+    );
+
     return;
   }
 
   enviando.value = true;
 
+  // Estos datos se usan tanto para la API
+  // como para guardar la solicitud sin conexión.
   const datos = {
-    tipo: form.value.tipo,
+    servicioRecoleccionId: servicioId,
+    tipoResiduo: nombreServicio,
     direccion: form.value.direccion.trim(),
     observaciones: form.value.observaciones.trim(),
     latitud: form.value.latitud,
@@ -473,7 +677,8 @@ const enviarSolicitud = async () => {
 
   try {
     await crear_solicitud_api({
-      tipoResiduo: datos.tipo,
+      servicioRecoleccionId: datos.servicioRecoleccionId,
+      tipoResiduo: datos.tipoResiduo,
       direccion: datos.direccion,
       observaciones: datos.observaciones,
       latitud: datos.latitud,
@@ -488,8 +693,12 @@ const enviarSolicitud = async () => {
       'Solicitud registrada correctamente.',
       'success'
     );
+
   } catch (error) {
-    console.error('Error al crear solicitud:', error);
+    console.error(
+      'Error al crear solicitud:',
+      error
+    );
 
     const mensaje = error instanceof Error
       ? error.message
@@ -500,10 +709,12 @@ const enviarSolicitud = async () => {
       mensaje.includes('Tiempo de espera');
 
     if (fueEncolada) {
+
+      // Guardar también el ID del servicio elegido.
       guardarPendienteLocal({
         id: -Date.now(),
-        servicioRecoleccionId: 0,
-        tipoResiduo: datos.tipo,
+        servicioRecoleccionId: datos.servicioRecoleccionId,
+        tipoResiduo: datos.tipoResiduo,
         direccion: datos.direccion,
         observaciones: datos.observaciones,
         fechaCreacion: new Date().toISOString(),
@@ -520,27 +731,37 @@ const enviarSolicitud = async () => {
         'Sin conexión. La solicitud quedó guardada y se enviará cuando vuelva internet.',
         'warning'
       );
+
     } else {
       await mostrarToast(
         mensaje || 'No se pudo registrar la solicitud.',
         'danger'
       );
     }
+
   } finally {
     enviando.value = false;
   }
 };
 
+
+// NORMALIZAR ESTADO
 const normalizarEstado = (
   estado: string | null | undefined
 ) => {
-  return (estado || '').trim().toLocaleLowerCase('es-AR');
+  return (estado || '')
+    .trim()
+    .toLocaleLowerCase('es-AR');
 };
 
+
+// VERIFICAR SI ESTÁ EN CAMINO
 const estaEnCamino = (item: SolicitudApi) => {
   return normalizarEstado(item.estado) === 'en camino';
 };
 
+
+// VERIFICAR FIRMA REGISTRADA
 const tieneFirmaRegistrada = (item: SolicitudApi) => {
   const solicitud = item as SolicitudConFirma;
 
@@ -550,6 +771,8 @@ const tieneFirmaRegistrada = (item: SolicitudApi) => {
   );
 };
 
+
+// VERIFICAR SI PUEDE FIRMAR
 const puedeFirmar = (item: SolicitudApi) => {
   return (
     estaEnCamino(item) &&
@@ -559,12 +782,15 @@ const puedeFirmar = (item: SolicitudApi) => {
   );
 };
 
+
+// ABRIR FIRMA
 const abrirFirma = (item: SolicitudApi) => {
   if (!puedeFirmar(item)) {
     void mostrarToast(
       'Solo podés firmar una solicitud en camino que todavía no tenga conformidad registrada.',
       'warning'
     );
+
     return;
   }
 
@@ -572,11 +798,15 @@ const abrirFirma = (item: SolicitudApi) => {
   modalFirmaAbierto.value = true;
 };
 
+
+// CERRAR FIRMA
 const cerrarFirma = () => {
   modalFirmaAbierto.value = false;
   solicitudParaFirma.value = null;
 };
 
+
+// FINALIZAR FIRMA
 const finalizarFirma = async () => {
   modalFirmaAbierto.value = false;
   solicitudParaFirma.value = null;
@@ -589,6 +819,8 @@ const finalizarFirma = async () => {
   );
 };
 
+
+// FORMATEAR FECHA
 const formatearFecha = (fecha: string) => {
   if (!fecha) return 'Sin fecha';
 
@@ -599,15 +831,22 @@ const formatearFecha = (fecha: string) => {
   return valor.toLocaleDateString('es-AR');
 };
 
+
+// ACTUALIZAR DESPUÉS DE SINCRONIZAR
 const actualizarTrasSincronizacion = () => {
   void cargarMisSolicitudes();
 };
 
+
+// ACTUALIZAR AL RECUPERAR INTERNET
 const actualizarAlVolverInternet = () => {
   void cargarMisSolicitudes();
 };
 
+
+// INICIO
 onMounted(() => {
+  void cargarServicios();
   void cargarMisSolicitudes();
 
   window.addEventListener(
@@ -621,6 +860,8 @@ onMounted(() => {
   );
 });
 
+
+// LIMPIEZA
 onUnmounted(() => {
   window.removeEventListener(
     'solicitudes-sincronizadas',

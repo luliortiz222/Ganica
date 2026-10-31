@@ -72,17 +72,12 @@ public class AuthController : ControllerBase
                 usuario.Id,
                 usuario.Email,
 
-                // Ejemplo:
-                // "vecino"
                 rol = usuario.Rol?.Codigo,
 
-                // Ejemplo:
-                // "Vecino"
                 nombre_rol = usuario.Rol?.Nombre
             }
         });
     }
-
 
     // REGISTRO
 
@@ -91,7 +86,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Registro(
         [FromBody] RegistroDto dto)
     {
-        // Validar email
+        // Validar email.
         if (string.IsNullOrWhiteSpace(dto.Email))
         {
             return BadRequest(new
@@ -100,8 +95,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Validar contraseña
-
+        // Validar contraseña.
         if (string.IsNullOrWhiteSpace(dto.Password))
         {
             return BadRequest(new
@@ -110,14 +104,12 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Normalizar email
-
+        // Normalizar email.
         var email = dto.Email
             .Trim()
             .ToLower();
 
-        // Verificar si ya existe
-
+        // Verificar si ya existe.
         var usuarioExistente = await _db.Usuarios
             .AnyAsync(u =>
                 u.Email.ToLower() == email);
@@ -131,8 +123,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        // CREAR USUARIO
-
+        // Crear usuario.
         var usuario = new Usuario
         {
             Email = email,
@@ -146,14 +137,12 @@ public class AuthController : ControllerBase
             Activo = true
         };
 
-        // Guardar usuario
-
+        // Guardar usuario.
         _db.Usuarios.Add(usuario);
 
         await _db.SaveChangesAsync();
 
-        // Respuesta
-
+        // Respuesta.
         return Ok(new
         {
             mensaje = "Cuenta creada correctamente.",
@@ -163,8 +152,6 @@ public class AuthController : ControllerBase
                 usuario.Id,
                 usuario.Email,
 
-                // Como acabamos de crear el usuario
-                // sabemos que su rol es Vecino.
                 rol = "vecino",
 
                 nombre_rol = "Vecino"
@@ -172,7 +159,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    // Obtener perfil del usuario
+    // OBTENER PERFIL DEL USUARIO
 
     [HttpGet("yo")]
     [Authorize]
@@ -238,8 +225,7 @@ public class AuthController : ControllerBase
             )
         };
 
-        // Agregar rol al token
-
+        // Agregar rol al token.
         if (usuario.Rol is not null)
         {
             claims.Add(
@@ -257,11 +243,18 @@ public class AuthController : ControllerBase
             );
         }
 
-        // CLAVE JWT
-
+        // CLAVE JWT.
         var secretKey =
             _config["Jwt:SecretKey"]
             ?? "Ganica_Clave_Secreta_Super_Segura_2026_UnSL_TUDs!";
+
+        // Emisor y audiencia.
+        // Deben coincidir con los valores de Program.cs.
+        var issuer =
+            _config["Jwt:Issuer"] ?? "GanicaApi";
+
+        var audience =
+            _config["Jwt:Audience"] ?? "GanicaApp";
 
         var key =
             new SymmetricSecurityKey(
@@ -278,12 +271,12 @@ public class AuthController : ControllerBase
             DateTime.UtcNow.AddHours(2);
 
         var token = new JwtSecurityToken(
-        issuer: _config["Jwt:Issuer"],
-        audience: _config["Jwt:Audience"],
-        claims: claims,
-        expires: expiraEn,
-        signingCredentials: credentials
-);
+            issuer: issuer,
+            audience: audience,
+            claims: claims,
+            expires: expiraEn,
+            signingCredentials: credentials
+        );
 
         var tokenString =
             new JwtSecurityTokenHandler()
@@ -294,6 +287,8 @@ public class AuthController : ControllerBase
             expiraEn
         );
     }
+
+    // GENERAR REFRESH TOKEN
 
     private async Task<string> GenerarRefreshToken(
         long usuarioId)
@@ -327,11 +322,14 @@ public class AuthController : ControllerBase
     }
 }
 
+// DTO LOGIN
 
 public record LoginDto(
     string Email,
     string Password
 );
+
+// DTO REGISTRO
 
 public record RegistroDto(
     string Email,

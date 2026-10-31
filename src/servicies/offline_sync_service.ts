@@ -49,14 +49,22 @@ function actualizarSolicitudLocal(
 
         const coincide =
           (estado === "sin enviar" || estado === "sin_enviar") &&
+
           solicitud.tipoResiduo === datosEnviados.tipoResiduo &&
+
           solicitud.direccion === datosEnviados.direccion &&
+
           (solicitud.observaciones || "") ===
             (datosEnviados.observaciones || "") &&
+
           (solicitud.latitud ?? null) ===
             (datosEnviados.latitud ?? null) &&
+
           (solicitud.longitud ?? null) ===
-            (datosEnviados.longitud ?? null);
+            (datosEnviados.longitud ?? null) &&
+
+          Number(solicitud.servicioRecoleccionId ?? 0) ===
+            Number(datosEnviados.servicioRecoleccionId ?? 0);
 
         if (!coincide) return solicitud;
 
@@ -64,16 +72,25 @@ function actualizarSolicitudLocal(
 
         return {
           ...solicitud,
+
+          // Reemplaza el ID temporal por el ID de la API.
           id: respuesta?.id ?? solicitud.id,
+
+          // Conserva el servicio seleccionado.
           servicioRecoleccionId:
             respuesta?.servicioRecoleccionId ??
             solicitud.servicioRecoleccionId ??
+            datosEnviados.servicioRecoleccionId ??
             0,
+
           estado: respuesta?.estado || "Pendiente",
+
           fechaCreacion:
             respuesta?.fechaCreacion || solicitud.fechaCreacion,
+
           firmaConformidadArchivo:
             respuesta?.firmaConformidadArchivo ?? null,
+
           firmaConformidadFecha:
             respuesta?.firmaConformidadFecha ?? null
         };
@@ -84,6 +101,12 @@ function actualizarSolicitudLocal(
       CLAVE_SOLICITUDES,
       JSON.stringify(solicitudesActualizadas)
     );
+
+    if (!actualizada) {
+      console.warn(
+        "No se encontró una solicitud local pendiente que coincida con los datos enviados."
+      );
+    }
 
   } catch (error) {
     console.error(
@@ -117,7 +140,9 @@ async function ejecutar_sincronizacion_cola(): Promise<void> {
     try {
       const url = construir_url(operacion.endpoint);
 
-      const encabezados = new Headers(operacion.options.headers);
+      const encabezados = new Headers(
+        operacion.options.headers
+      );
 
       const esFormData =
         operacion.options.body instanceof FormData;
