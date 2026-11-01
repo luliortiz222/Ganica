@@ -1,3 +1,4 @@
+
 <template>
   <ion-page>
     <ion-header>
@@ -65,6 +66,19 @@
               </ion-button>
             </form>
 
+            <!-- INICIAR SESIÓN CON GOOGLE -->
+            <ion-button
+  expand="block"
+  color="dark"
+  fill="solid"
+  class="ion-margin-top"
+  :disabled="procesandoGoogle"
+  @click="handleGoogleLogin"
+>
+  {{ procesandoGoogle
+    ? 'Conectando con Google...'
+    : 'Ingresar con Google' }}
+</ion-button>
             <div class="ion-text-center ion-margin-top">
               <p>¿No tenés una cuenta?</p>
 
@@ -286,6 +300,8 @@ import {
 
 import { saveOutline } from 'ionicons/icons';
 
+import { SocialLogin } from '@capgo/capacitor-social-login';
+
 import {
   obtenerTemaGuardado,
   aplicarTema
@@ -325,6 +341,9 @@ const PERFIL_KEY = 'ganica_perfil_usuario';
 const esOscuro = ref(false);
 const autenticado = ref(false);
 const modoRegistro = ref(false);
+
+/* ESTADO DE GOOGLE */
+const procesandoGoogle = ref(false);
 
 /* CREDENCIALES LOGIN */
 const credenciales = ref({
@@ -471,18 +490,15 @@ const mostrarLogin = () => {
 /* INICIAR SESIÓN */
 const handle = async () => {
   try {
-    // Iniciar sesión y guardar la respuesta de la API.
     const respuestaLogin = await authService.login(
       credenciales.value
     );
 
-    // Comprobar qué devolvió el servidor.
     console.log(
       'RESPUESTA COMPLETA DEL LOGIN:',
       respuestaLogin
     );
 
-    // Comprobar los datos guardados después del login.
     console.log(
       'USUARIO GUARDADO:',
       localStorage.getItem('usuario')
@@ -493,10 +509,7 @@ const handle = async () => {
       !!localStorage.getItem('token')
     );
 
-    // Actualizar los datos visibles en Mi Cuenta.
     verificarSesion();
-
-    // Actualizar el menú y el inicio de toda la aplicación.
     notificarCambioSesion();
 
     const toast = await toastController.create({
@@ -525,6 +538,71 @@ const handle = async () => {
   }
 };
 
+/* INICIAR SESIÓN CON GOOGLE */
+const handleGoogleLogin = async () => {
+  if (procesandoGoogle.value) return;
+
+  procesandoGoogle.value = true;
+
+  try {
+    const respuestaGoogle = await SocialLogin.login({
+      provider: 'google',
+      options: {
+        scopes: ['email', 'profile']
+      }
+    });
+
+    if (respuestaGoogle.result.responseType !== 'online') {
+      throw new Error(
+        'Google no devolvió un token de identidad.'
+      );
+    }
+
+    const idToken = respuestaGoogle.result.idToken;
+
+    if (!idToken) {
+      throw new Error(
+        'No se recibió el token de Google.'
+      );
+    }
+
+    await authService.loginGoogle(idToken);
+
+    verificarSesion();
+    notificarCambioSesion();
+
+    const toast = await toastController.create({
+      message: '¡Inicio de sesión con Google exitoso!',
+      duration: 2500,
+      color: 'success',
+      position: 'bottom'
+    });
+
+    await toast.present();
+
+  } catch (error) {
+    console.error(
+      'Error al iniciar sesión con Google:',
+      error
+    );
+
+    const mensaje = error instanceof Error
+      ? error.message
+      : 'No se pudo iniciar sesión con Google.';
+
+    const toast = await toastController.create({
+      message: mensaje,
+      duration: 3500,
+      color: 'danger',
+      position: 'bottom'
+    });
+
+    await toast.present();
+
+  } finally {
+    procesandoGoogle.value = false;
+  }
+};
 
 /* REGISTRAR USUARIO */
 const registrar = async () => {
@@ -608,7 +686,6 @@ const cerrarSesion = () => {
 
   esSinRol.value = false;
 
-  // Actualizar el menú y la página de inicio.
   notificarCambioSesion();
 };
 

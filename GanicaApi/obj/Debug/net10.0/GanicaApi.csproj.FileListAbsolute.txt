@@ -271,3 +271,9 @@ C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\runtimes\win-x86\nat
 C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\runtimes\win-x86\native\qpdf.dll
 C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\GanicaApi.staticwebassets.runtime.json
 C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\QRCoder.dll
+C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\Google.Apis.dll
+C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\Google.Apis.Auth.dll
+C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\Google.Apis.Core.dll
+C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\Newtonsoft.Json.dll
+C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\System.Management.dll
+C:\Users\Lulim.LOURDES\GANICAVM\GanicaApi\bin\Debug\net10.0\runtimes\win\lib\net7.0\System.Management.dll

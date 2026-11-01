@@ -1,3 +1,4 @@
+
 import { obtener_api_url } from '@/config/debug';
 
 export interface LoginRequest {
@@ -41,8 +42,6 @@ export const authService = {
   ): Promise<AuthResponse> {
     const url = `${obtener_api_url()}/sesion/login`;
 
-    // DIAGNÓSTICO TEMPORAL: comprobar qué correo se envía.
-    // No registrar ni mostrar la contraseña.
     console.log(
       'EMAIL ENVIADO AL LOGIN:',
       credenciales.email
@@ -78,19 +77,15 @@ export const authService = {
       );
     }
 
-    // DIAGNÓSTICO TEMPORAL: comprobar qué usuario devuelve la API.
-    // No imprimir el token.
     console.log(
       'USUARIO DEVUELTO POR LA API:',
       data.usuario
     );
 
-    // Normalizar el rol para utilizarlo de forma consistente.
     const rolUsuario = String(
       data.usuario.rol ?? ''
     ).trim().toLowerCase();
 
-    // Guardar los datos de la sesión.
     localStorage.setItem('token', data.token);
 
     if (data.refresh_token) {
@@ -111,13 +106,69 @@ export const authService = {
       })
     );
 
-    // Comprobar qué usuario quedó guardado.
     console.log(
       'USUARIO GUARDADO EN LOCALSTORAGE:',
       localStorage.getItem('usuario')
     );
 
-    // Notificar solamente después de guardar la sesión.
+    notificarCambioSesion();
+
+    return data;
+  },
+
+  /**
+   * Iniciar sesión mediante Google.
+   */
+  async loginGoogle(idToken: string): Promise<AuthResponse> {
+    const url = `${obtener_api_url()}/sesion/google`;
+
+    const respuesta = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idToken }),
+    });
+
+    const data = await respuesta.json().catch(() => null);
+
+    if (!respuesta.ok) {
+      throw new Error(
+        data?.mensaje ||
+        'No se pudo iniciar sesión con Google.'
+      );
+    }
+
+    if (!data?.token || !data?.usuario) {
+      throw new Error(
+        'La respuesta del servidor no contiene una sesión válida.'
+      );
+    }
+
+    const rolUsuario = String(
+      data.usuario.rol ?? ''
+    ).trim().toLowerCase();
+
+    localStorage.setItem('token', data.token);
+
+    if (data.refresh_token) {
+      localStorage.setItem(
+        'refreshToken',
+        data.refresh_token
+      );
+    } else {
+      localStorage.removeItem('refreshToken');
+    }
+
+    localStorage.setItem(
+      'usuario',
+      JSON.stringify({
+        id: data.usuario.id,
+        email: data.usuario.email,
+        rol: rolUsuario,
+      })
+    );
+
     notificarCambioSesion();
 
     return data;
@@ -157,7 +208,6 @@ export const authService = {
     localStorage.removeItem('usuario');
     localStorage.removeItem('ganica_perfil_usuario');
 
-    // Avisar después de eliminar los datos anteriores.
     notificarCambioSesion();
   },
 

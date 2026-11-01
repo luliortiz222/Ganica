@@ -1,4 +1,3 @@
-
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -7,12 +6,12 @@ using System.Text;
 using GanicaApi.Data;
 using GanicaApi.Models;
 
+using Google.Apis.Auth;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-
-using BCrypt.Net;
 
 namespace GanicaApi.Controllers;
 
@@ -31,7 +30,7 @@ public class AuthController : ControllerBase
         _config = config;
     }
 
-    // LOGIN
+    // LOGIN TRADICIONAL
 
     [HttpPost("login")]
     [AllowAnonymous]
@@ -62,18 +61,112 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             token = resultadoToken.token,
-
             expira_en = resultadoToken.expiraEn,
-
             refresh_token = refreshToken,
 
             usuario = new
             {
                 usuario.Id,
                 usuario.Email,
-
                 rol = usuario.Rol?.Codigo,
+                nombre_rol = usuario.Rol?.Nombre
+            }
+        });
+    }
 
+    // LOGIN CON GOOGLE
+
+    [HttpPost("google")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LoginGoogle(
+        [FromBody] GoogleLoginDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.IdToken))
+        {
+            return BadRequest(new
+            {
+                mensaje = "El token de Google es obligatorio."
+            });
+        }
+
+        var clientId = _config["Google:ClientId"];
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            return StatusCode(500, new
+            {
+                mensaje = "La configuración de Google no está disponible."
+            });
+        }
+
+        GoogleJsonWebSignature.Payload payload;
+
+        try
+        {
+            // Verificar firma, vencimiento y audiencia del token.
+            payload = await GoogleJsonWebSignature.ValidateAsync(
+                dto.IdToken,
+                new GoogleJsonWebSignature.ValidationSettings
+                {
+                    Audience = new[] { clientId }
+                }
+            );
+        }
+        catch (InvalidJwtException)
+        {
+            return Unauthorized(new
+            {
+                mensaje = "El token de Google no es válido."
+            });
+        }
+
+        // Comprobar que Google verificó el correo.
+        if (payload.EmailVerified != true ||
+            string.IsNullOrWhiteSpace(payload.Email))
+        {
+            return Unauthorized(new
+            {
+                mensaje = "Google no confirmó el correo electrónico."
+            });
+        }
+
+        var email = payload.Email
+            .Trim()
+            .ToLowerInvariant();
+
+        // Buscar una cuenta existente y activa.
+        var usuario = await _db.Usuarios
+            .Include(u => u.Rol)
+            .FirstOrDefaultAsync(u =>
+                u.Email.ToLower() == email &&
+                u.Activo);
+
+        // No crear cuentas automáticamente.
+        if (usuario is null)
+        {
+            return StatusCode(403, new
+            {
+                mensaje = "No existe una cuenta habilitada en Gánica para este correo."
+            });
+        }
+
+        // Reutilizar la generación de tokens existente.
+        var resultadoToken = GenerarAccessToken(usuario);
+
+        var refreshToken =
+            await GenerarRefreshToken(usuario.Id);
+
+        return Ok(new
+        {
+            token = resultadoToken.token,
+            expira_en = resultadoToken.expiraEn,
+            refresh_token = refreshToken,
+
+            usuario = new
+            {
+                usuario.Id,
+                usuario.Email,
+                rol = usuario.Rol?.Codigo,
                 nombre_rol = usuario.Rol?.Nombre
             }
         });
@@ -86,7 +179,6 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Registro(
         [FromBody] RegistroDto dto)
     {
-        // Validar email.
         if (string.IsNullOrWhiteSpace(dto.Email))
         {
             return BadRequest(new
@@ -95,7 +187,6 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Validar contraseña.
         if (string.IsNullOrWhiteSpace(dto.Password))
         {
             return BadRequest(new
@@ -104,45 +195,36 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Normalizar email.
         var email = dto.Email
             .Trim()
             .ToLower();
 
-        // Verificar si ya existe.
         var usuarioExistente = await _db.Usuarios
-            .AnyAsync(u =>
-                u.Email.ToLower() == email);
+            .AnyAsync(u => u.Email.ToLower() == email);
 
         if (usuarioExistente)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "Ya existe una cuenta registrada con ese correo."
+                mensaje = "Ya existe una cuenta registrada con ese correo."
             });
         }
 
-        // Crear usuario.
         var usuario = new Usuario
         {
             Email = email,
 
             PasswordHash =
-                BCrypt.Net.BCrypt.HashPassword(
-                    dto.Password),
+                BCrypt.Net.BCrypt.HashPassword(dto.Password),
 
             RolId = 3,
-
             Activo = true
         };
 
-        // Guardar usuario.
         _db.Usuarios.Add(usuario);
 
         await _db.SaveChangesAsync();
 
-        // Respuesta.
         return Ok(new
         {
             mensaje = "Cuenta creada correctamente.",
@@ -151,9 +233,7 @@ public class AuthController : ControllerBase
             {
                 usuario.Id,
                 usuario.Email,
-
                 rol = "vecino",
-
                 nombre_rol = "Vecino"
             }
         });
@@ -166,21 +246,16 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> ObtenerPerfil()
     {
         var userIdClaim =
-            User.FindFirst(
-                ClaimTypes.NameIdentifier
-            )?.Value;
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-        if (!long.TryParse(
-                userIdClaim,
-                out var userId))
+        if (!long.TryParse(userIdClaim, out var userId))
         {
             return Unauthorized();
         }
 
         var usuario = await _db.Usuarios
             .Include(u => u.Rol)
-            .FirstOrDefaultAsync(
-                u => u.Id == userId);
+            .FirstOrDefaultAsync(u => u.Id == userId);
 
         if (usuario is null)
         {
@@ -190,11 +265,8 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             usuario.Id,
-
             usuario.Email,
-
             rol = usuario.Rol?.Codigo,
-
             nombre_rol = usuario.Rol?.Nombre
         });
     }
@@ -204,8 +276,7 @@ public class AuthController : ControllerBase
     private (
         string token,
         DateTime expiraEn
-    ) GenerarAccessToken(
-        Usuario usuario)
+    ) GenerarAccessToken(Usuario usuario)
     {
         var claims = new List<Claim>
         {
@@ -225,14 +296,10 @@ public class AuthController : ControllerBase
             )
         };
 
-        // Agregar rol al token.
         if (usuario.Rol is not null)
         {
             claims.Add(
-                new Claim(
-                    "rol_codigo",
-                    usuario.Rol.Codigo
-                )
+                new Claim("rol_codigo", usuario.Rol.Codigo)
             );
 
             claims.Add(
@@ -243,32 +310,26 @@ public class AuthController : ControllerBase
             );
         }
 
-        // CLAVE JWT.
         var secretKey =
             _config["Jwt:SecretKey"]
             ?? "Ganica_Clave_Secreta_Super_Segura_2026_UnSL_TUDs!";
 
-        // Emisor y audiencia.
-        // Deben coincidir con los valores de Program.cs.
         var issuer =
             _config["Jwt:Issuer"] ?? "GanicaApi";
 
         var audience =
             _config["Jwt:Audience"] ?? "GanicaApp";
 
-        var key =
-            new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(secretKey)
-            );
+        var key = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(secretKey)
+        );
 
-        var credentials =
-            new SigningCredentials(
-                key,
-                SecurityAlgorithms.HmacSha256
-            );
+        var credentials = new SigningCredentials(
+            key,
+            SecurityAlgorithms.HmacSha256
+        );
 
-        var expiraEn =
-            DateTime.UtcNow.AddHours(2);
+        var expiraEn = DateTime.UtcNow.AddHours(2);
 
         var token = new JwtSecurityToken(
             issuer: issuer,
@@ -279,13 +340,9 @@ public class AuthController : ControllerBase
         );
 
         var tokenString =
-            new JwtSecurityTokenHandler()
-                .WriteToken(token);
+            new JwtSecurityTokenHandler().WriteToken(token);
 
-        return (
-            tokenString,
-            expiraEn
-        );
+        return (tokenString, expiraEn);
     }
 
     // GENERAR REFRESH TOKEN
@@ -295,21 +352,18 @@ public class AuthController : ControllerBase
     {
         var randomBytes = new byte[32];
 
-        using var rng =
-            RandomNumberGenerator.Create();
+        using var rng = RandomNumberGenerator.Create();
 
         rng.GetBytes(randomBytes);
 
-        var rawToken =
-            Convert.ToBase64String(randomBytes);
+        var rawToken = Convert.ToBase64String(randomBytes);
 
         var refreshToken = new RefreshToken
         {
             UsuarioId = usuarioId,
 
             TokenHash =
-                BCrypt.Net.BCrypt.HashPassword(
-                    rawToken),
+                BCrypt.Net.BCrypt.HashPassword(rawToken),
 
             RevocadoEn = null
         };
@@ -334,4 +388,10 @@ public record LoginDto(
 public record RegistroDto(
     string Email,
     string Password
+);
+
+// DTO LOGIN GOOGLE
+
+public record GoogleLoginDto(
+    string IdToken
 );

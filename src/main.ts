@@ -1,3 +1,4 @@
+
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
@@ -5,6 +6,7 @@ import router from './router';
 import { IonicVue } from '@ionic/vue';
 import { createPinia } from 'pinia';
 import { iniciar_offline_service } from './servicies/offline_service';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/vue/css/core.css';
@@ -22,16 +24,7 @@ import '@ionic/vue/css/text-transformation.css';
 import '@ionic/vue/css/flex-utils.css';
 import '@ionic/vue/css/display.css';
 
-/**
- * Ionic Dark Mode
- * -----------------------------------------------------
- * For more info, please see:
- * https://ionicframework.com/docs/theming/dark-mode
- */
-
-/* @import '@ionic/vue/css/palettes/dark.always.css'; */
-/* @import '@ionic/vue/css/palettes/dark.class.css'; */
-/*import '@ionic/vue/css/palettes/dark.system.css';*/
+/* Ionic Dark Mode */
 import '@ionic/vue/css/palettes/dark.class.css';
 
 /* Theme variables */
@@ -47,6 +40,23 @@ app
   .use(router)
   .use(pinia);
 
-router.isReady().then(() => {
+/* INICIALIZAR GOOGLE Y ARRANCAR LA APLICACIÓN */
+const iniciarAplicacion = async () => {
+  try {
+    await SocialLogin.initialize({
+      google: {
+        webClientId: '9492405865-9m3cu3m9gip3jaa1tgjcb13dhij3nl75.apps.googleusercontent.com',
+        mode: 'online'
+      }
+    });
+
+    console.log('Google Login inicializado correctamente.');
+  } catch (error) {
+    console.error('Error al inicializar Google Login:', error);
+  }
+
+  await router.isReady();
   app.mount('#app');
-});
+};
+
+iniciarAplicacion();
