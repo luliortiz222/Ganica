@@ -4,7 +4,7 @@ namespace GanicaApi.Models;
 public class Solicitud
 {
     public int Id { get; set; }
-
+    public string? TokenPublico { get; set; }
     public int ServicioRecoleccionId { get; set; }
 
     // Usuario que creó la solicitud.

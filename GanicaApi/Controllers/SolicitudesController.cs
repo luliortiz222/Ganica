@@ -1,10 +1,16 @@
+
 using System.Security.Claims;
+using System.Security.Cryptography;
 using GanicaApi.Data;
 using GanicaApi.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using QRCoder;
+using QuestPDF.Fluent;
+using QuestPDF.Infrastructure;
 
 namespace GanicaApi.Controllers;
 
@@ -69,142 +75,368 @@ public class SolicitudesController : ControllerBase
         return Forbid();
     }
 
-   
-// CREAR SOLICITUD:
-// Exclusivamente el vecino.
-[HttpPost]
-[Authorize(Roles = "vecino")]
-public async Task<ActionResult<Solicitud>> PostSolicitud(
-    [FromBody] Solicitud solicitud)
-{
-    if (!ObtenerUsuarioId(out var usuarioId))
-        return Unauthorized();
-
-    if (solicitud == null)
+    // CREAR SOLICITUD:
+    // Exclusivamente el vecino.
+    [HttpPost]
+    [Authorize(Roles = "vecino")]
+    public async Task<ActionResult<Solicitud>> PostSolicitud(
+        [FromBody] Solicitud solicitud)
     {
-        return BadRequest(new
+        if (!ObtenerUsuarioId(out var usuarioId))
+            return Unauthorized();
+
+        if (solicitud == null)
         {
-            mensaje = "Los datos de la solicitud son obligatorios."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje = "Los datos de la solicitud son obligatorios."
+            });
+        }
 
-    if (solicitud.ServicioRecoleccionId <= 0)
-    {
-        return BadRequest(new
+        if (solicitud.ServicioRecoleccionId <= 0)
         {
-            mensaje = "Debés seleccionar un servicio de recolección."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje = "Debés seleccionar un servicio de recolección."
+            });
+        }
 
-    if (string.IsNullOrWhiteSpace(solicitud.Direccion))
-    {
-        return BadRequest(new
+        if (string.IsNullOrWhiteSpace(solicitud.Direccion))
         {
-            mensaje = "Debés indicar la dirección de recolección."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje = "Debés indicar la dirección de recolección."
+            });
+        }
 
-    // Buscar el servicio seleccionado por el vecino.
-    // Solamente se permiten servicios que requieren solicitud.
-    var servicio = await _context.ServiciosRecoleccion
-        .FirstOrDefaultAsync(s =>
-            s.Id == solicitud.ServicioRecoleccionId &&
-            s.RequiereSolicitud);
+        // Buscar el servicio seleccionado por el vecino.
+        // Solamente se permiten servicios que requieren solicitud.
+        var servicio = await _context.ServiciosRecoleccion
+            .FirstOrDefaultAsync(s =>
+                s.Id == solicitud.ServicioRecoleccionId &&
+                s.RequiereSolicitud);
 
-    if (servicio == null)
-    {
-        return BadRequest(new
+        if (servicio == null)
         {
-            mensaje = "El servicio seleccionado no existe o no está habilitado para solicitudes."
-        });
-    }
+            return BadRequest(new
+            {
+                mensaje = "El servicio seleccionado no existe o no está habilitado para solicitudes."
+            });
+        }
 
-    // El tipo de residuo se obtiene del servicio seleccionado.
-    solicitud.TipoResiduo = servicio.Nombre;
-    solicitud.ServicioRecoleccionId = servicio.Id;
-    solicitud.FechaCreacion = DateTime.Now;
-    solicitud.Estado = "Pendiente";
+        // El tipo de residuo se obtiene del servicio seleccionado.
+        solicitud.TipoResiduo = servicio.Nombre;
+        solicitud.ServicioRecoleccionId = servicio.Id;
+        solicitud.FechaCreacion = DateTime.Now;
+        solicitud.Estado = "Pendiente";
 
-    // El UsuarioId siempre se obtiene del token.
-    solicitud.UsuarioId = usuarioId;
+        // Generar un token público seguro de 32 caracteres.
+        solicitud.TokenPublico =
+            Convert.ToHexString(RandomNumberGenerator.GetBytes(16))
+                .ToLowerInvariant();
 
-    // Evitar asignaciones de navegación enviadas por el cliente.
-    solicitud.Usuario = null;
-    solicitud.ServicioRecoleccion = null;
+        // El UsuarioId siempre se obtiene del token.
+        solicitud.UsuarioId = usuarioId;
 
-    _context.Solicitudes.Add(solicitud);
-    await _context.SaveChangesAsync();
+        // Evitar asignaciones de navegación enviadas por el cliente.
+        solicitud.Usuario = null;
+        solicitud.ServicioRecoleccion = null;
 
-    // Registrar creación en el historial.
-    _context.HistorialSolicitudes.Add(new HistorialSolicitud
-    {
-        SolicitudId = solicitud.Id,
-        UsuarioId = usuarioId,
-        Accion = "Creada",
-        EstadoAnterior = null,
-        EstadoNuevo = solicitud.Estado,
-        Fecha = DateTimeOffset.UtcNow,
-        Observacion = "Solicitud de recolección creada por un vecino."
-    });
+        _context.Solicitudes.Add(solicitud);
+        await _context.SaveChangesAsync();
 
-    // Buscar administradores activos.
-    var administradores = await _context.Usuarios
-        .Include(u => u.Rol)
-        .Where(u =>
-            u.Activo &&
-            u.Rol != null &&
-            u.Rol.Codigo == "administrador")
-        .ToListAsync();
-
-    // Notificar a todos los administradores activos.
-    foreach (var administrador in administradores)
-    {
-        _context.Notificaciones.Add(new Notificacion
+        // Registrar creación en el historial.
+        _context.HistorialSolicitudes.Add(new HistorialSolicitud
         {
-            UsuarioId = administrador.Id,
             SolicitudId = solicitud.Id,
-            Titulo = "Nueva solicitud de un vecino",
-            Mensaje =
-                $"Un vecino generó una solicitud de {solicitud.TipoResiduo}. " +
-                $"Dirección: {solicitud.Direccion}. " +
-                $"Observaciones: {solicitud.Observaciones}",
-            Tipo = TipoNotificacion.Entrega,
-            CreadoEn = DateTimeOffset.UtcNow
+            UsuarioId = usuarioId,
+            Accion = "Creada",
+            EstadoAnterior = null,
+            EstadoNuevo = solicitud.Estado,
+            Fecha = DateTimeOffset.UtcNow,
+            Observacion = "Solicitud de recolección creada por un vecino."
         });
-    }
 
-    // Buscar recolectores activos.
-    var recolectores = await _context.Usuarios
-        .Include(u => u.Rol)
-        .Where(u =>
-            u.Activo &&
-            u.Rol != null &&
-            u.Rol.Codigo == "recolector")
-        .ToListAsync();
+        // Buscar administradores activos.
+        var administradores = await _context.Usuarios
+            .Include(u => u.Rol)
+            .Where(u =>
+                u.Activo &&
+                u.Rol != null &&
+                u.Rol.Codigo == "administrador")
+            .ToListAsync();
 
-    // Notificar a todos los recolectores activos.
-    foreach (var recolector in recolectores)
-    {
-        _context.Notificaciones.Add(new Notificacion
+        // Notificar a todos los administradores activos.
+        foreach (var administrador in administradores)
         {
-            UsuarioId = recolector.Id,
-            SolicitudId = solicitud.Id,
-            Titulo = "Nueva solicitud de recolección",
-            Mensaje =
-                $"Tenés una nueva tarea: {solicitud.TipoResiduo}. " +
-                $"Dirección: {solicitud.Direccion}. " +
-                $"Observaciones: {solicitud.Observaciones}",
-            Tipo = TipoNotificacion.Entrega,
-            CreadoEn = DateTimeOffset.UtcNow
-        });
+            _context.Notificaciones.Add(new Notificacion
+            {
+                UsuarioId = administrador.Id,
+                SolicitudId = solicitud.Id,
+                Titulo = "Nueva solicitud de un vecino",
+                Mensaje =
+                    $"Un vecino generó una solicitud de {solicitud.TipoResiduo}. " +
+                    $"Dirección: {solicitud.Direccion}. " +
+                    $"Observaciones: {solicitud.Observaciones}",
+                Tipo = TipoNotificacion.Entrega,
+                CreadoEn = DateTimeOffset.UtcNow
+            });
+        }
+
+        // Buscar recolectores activos.
+        var recolectores = await _context.Usuarios
+            .Include(u => u.Rol)
+            .Where(u =>
+                u.Activo &&
+                u.Rol != null &&
+                u.Rol.Codigo == "recolector")
+            .ToListAsync();
+
+        // Notificar a todos los recolectores activos.
+        foreach (var recolector in recolectores)
+        {
+            _context.Notificaciones.Add(new Notificacion
+            {
+                UsuarioId = recolector.Id,
+                SolicitudId = solicitud.Id,
+                Titulo = "Nueva solicitud de recolección",
+                Mensaje =
+                    $"Tenés una nueva tarea: {solicitud.TipoResiduo}. " +
+                    $"Dirección: {solicitud.Direccion}. " +
+                    $"Observaciones: {solicitud.Observaciones}",
+                Tipo = TipoNotificacion.Entrega,
+                CreadoEn = DateTimeOffset.UtcNow
+            });
+        }
+
+        // Guardar historial y todas las notificaciones.
+        await _context.SaveChangesAsync();
+
+        return Ok(solicitud);
     }
 
-    // Guardar historial y todas las notificaciones.
-    await _context.SaveChangesAsync();
+    // GENERAR QR DE UNA SOLICITUD:
+    // El vecino propietario y el administrador pueden generar el QR.
+    [HttpGet("{id}/qr")]
+    [Authorize(Roles = "vecino,administrador")]
+    public async Task<IActionResult> GenerarQr(int id)
+    {
+        if (!ObtenerUsuarioId(out var usuarioId))
+            return Unauthorized();
 
-    return Ok(solicitud);
-}
+        var solicitud = await _context.Solicitudes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == id);
 
+        if (solicitud == null)
+        {
+            return NotFound(new
+            {
+                mensaje = "La solicitud no existe."
+            });
+        }
+
+        // El vecino solamente puede generar el QR de sus propias solicitudes.
+        if (User.IsInRole("vecino") &&
+            solicitud.UsuarioId != usuarioId)
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(solicitud.TokenPublico))
+        {
+            return BadRequest(new
+            {
+                mensaje = "La solicitud no tiene un token público."
+            });
+        }
+
+        var baseUrl = HttpContext.RequestServices
+            .GetRequiredService<IConfiguration>()["Publico:BaseUrl"];
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return StatusCode(500, new
+            {
+                mensaje = "No está configurada la dirección pública de Gánica."
+            });
+        }
+
+        var urlPublica =
+            $"{baseUrl.TrimEnd('/')}/p/{solicitud.TokenPublico}";
+
+        using var generador = new QRCodeGenerator();
+
+        using var datosQr = generador.CreateQrCode(
+            urlPublica,
+            QRCodeGenerator.ECCLevel.Q);
+
+        var qrCode = new PngByteQRCode(datosQr);
+        byte[] imagenQr = qrCode.GetGraphic(20);
+
+        return File(
+            imagenQr,
+            "image/png",
+            $"solicitud-{id}-qr.png");
+    }
+
+    // ==========================================
+    // GENERAR COMPROBANTE PDF DE UNA SOLICITUD
+    // El vecino propietario y el administrador
+    // pueden descargar el comprobante.
+    // ==========================================
+    [HttpGet("{id}/pdf")]
+    [Authorize(Roles = "vecino,administrador")]
+    public async Task<IActionResult> DescargarComprobantePdf(int id)
+    {
+        if (!ObtenerUsuarioId(out var usuarioId))
+            return Unauthorized();
+
+        var solicitud = await _context.Solicitudes
+            .AsNoTracking()
+            .Include(s => s.ServicioRecoleccion)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (solicitud == null)
+        {
+            return NotFound(new
+            {
+                mensaje = "La solicitud no existe."
+            });
+        }
+
+        // El vecino solamente puede descargar sus propios comprobantes.
+        if (User.IsInRole("vecino") &&
+            solicitud.UsuarioId != usuarioId)
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(solicitud.TokenPublico))
+        {
+            return BadRequest(new
+            {
+                mensaje = "La solicitud no tiene un enlace público disponible."
+            });
+        }
+
+        var baseUrl = HttpContext.RequestServices
+            .GetRequiredService<IConfiguration>()["Publico:BaseUrl"];
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return StatusCode(500, new
+            {
+                mensaje = "No está configurada la dirección pública de Gánica."
+            });
+        }
+
+        // El QR abre la consulta pública de esta solicitud.
+        var urlPublica =
+            $"{baseUrl.TrimEnd('/')}/p/{solicitud.TokenPublico}";
+
+        // Generar imagen QR.
+        using var generador = new QRCodeGenerator();
+
+        using var datosQr = generador.CreateQrCode(
+            urlPublica,
+            QRCodeGenerator.ECCLevel.Q);
+
+        var qrCode = new PngByteQRCode(datosQr);
+        byte[] imagenQr = qrCode.GetGraphic(20);
+
+        var nombreServicio =
+            solicitud.ServicioRecoleccion?.Nombre
+            ?? solicitud.TipoResiduo;
+
+        // Generar documento PDF.
+        var documento = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Margin(35);
+
+                page.Header()
+                    .Column(header =>
+                    {
+                        header.Item()
+                            .Text("GÁNICA")
+                            .Bold()
+                            .FontSize(24);
+
+                        header.Item()
+                            .Text("Comprobante de solicitud de recolección")
+                            .FontSize(14);
+                    });
+
+                page.Content()
+                    .PaddingVertical(20)
+                    .Column(col =>
+                    {
+                        col.Spacing(12);
+
+                        col.Item()
+                            .Text($"Solicitud N.º {solicitud.Id}")
+                            .Bold()
+                            .FontSize(18);
+
+                        col.Item()
+                            .Text($"Fecha: {solicitud.FechaCreacion:dd/MM/yyyy HH:mm}");
+
+                        col.Item()
+                            .Text($"Servicio: {nombreServicio}");
+
+                        col.Item()
+                            .Text($"Tipo de residuo: {solicitud.TipoResiduo}");
+
+                        col.Item()
+                            .Text($"Dirección de recolección: {solicitud.Direccion}");
+
+                        if (!string.IsNullOrWhiteSpace(solicitud.Observaciones))
+                        {
+                            col.Item()
+                                .Text($"Observaciones: {solicitud.Observaciones}");
+                        }
+
+                        col.Item()
+                            .PaddingTop(8)
+                            .Text($"Estado actual: {solicitud.Estado}")
+                            .Bold()
+                            .FontSize(14);
+
+                        col.Item()
+                            .PaddingTop(20)
+                            .AlignCenter()
+                            .Text("Escaneá el código QR para consultar el estado de tu solicitud.")
+                            .FontSize(11);
+
+                        col.Item()
+                            .PaddingTop(10)
+                            .AlignCenter()
+                            .Width(180)
+                            .Image(imagenQr);
+
+                        col.Item()
+                            .PaddingTop(8)
+                            .AlignCenter()
+                            .Text("La consulta pública no requiere iniciar sesión.")
+                            .FontSize(9);
+                    });
+
+                page.Footer()
+                    .AlignCenter()
+                    .Text("Gánica - Sistema de gestión de recolección")
+                    .FontSize(9);
+            });
+        });
+
+        byte[] pdfBytes = documento.GeneratePdf();
+
+        return File(
+            pdfBytes,
+            "application/pdf",
+            $"comprobante-solicitud-{id}.pdf");
+    }
 
     // CONSULTAR HISTORIAL:
     // Administrador: todo el historial.
@@ -550,4 +782,3 @@ public class ActualizarEstadoSolicitudRequest
 
     public string? Observacion { get; set; }
 }
-

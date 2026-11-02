@@ -218,6 +218,7 @@
               Conformidad pendiente de firma
             </p>
 
+            <!-- FIRMAR CONFORMIDAD -->
             <ion-button
               v-if="puedeFirmar(item)"
               expand="block"
@@ -227,6 +228,70 @@
               <ion-icon :icon="createOutline" slot="start" />
               Firmar conformidad
             </ion-button>
+
+            <!-- VER QR PÚBLICO -->
+            <ion-button
+              v-if="item.id > 0"
+              expand="block"
+              fill="outline"
+              class="ion-margin-top"
+              :disabled="
+                qrCargandoId !== null ||
+                pdfProcesandoId !== null
+              "
+              @click="abrirQr(item)"
+            >
+              <ion-icon :icon="qrCodeOutline" slot="start" />
+              {{
+                qrCargandoId === item.id
+                  ? 'Generando QR...'
+                  : 'Ver QR público'
+              }}
+            </ion-button>
+
+            <!-- DESCARGAR COMPROBANTE PDF -->
+            <ion-button
+              v-if="item.id > 0"
+              expand="block"
+              fill="outline"
+              color="success"
+              class="ion-margin-top"
+              :disabled="
+                pdfProcesandoId !== null ||
+                qrCargandoId !== null
+              "
+              @click="descargarComprobante(item)"
+            >
+              <ion-icon :icon="downloadOutline" slot="start" />
+              {{
+                pdfProcesandoId === item.id &&
+                pdfOperacion === 'descargar'
+                  ? 'Descargando comprobante...'
+                  : 'Descargar comprobante PDF'
+              }}
+            </ion-button>
+
+            <!-- COMPARTIR COMPROBANTE PDF -->
+            <ion-button
+              v-if="item.id > 0"
+              expand="block"
+              fill="outline"
+              class="ion-margin-top"
+              :disabled="
+                pdfProcesandoId !== null ||
+                qrCargandoId !== null
+              "
+              @click="compartirComprobante(item)"
+            >
+              <ion-icon :icon="shareSocialOutline" slot="start" />
+              {{
+                pdfProcesandoId === item.id &&
+                pdfOperacion === 'compartir'
+                  ? 'Preparando comprobante...'
+                  : 'Compartir comprobante'
+              }}
+            </ion-button>
+
           </ion-label>
         </ion-item>
       </ion-list>
@@ -252,6 +317,44 @@
       @cerrar="cerrarFirma"
       @finalizada="finalizarFirma"
     />
+
+    <!-- MODAL DEL QR PÚBLICO -->
+    <ion-modal
+      :is-open="modalQrAbierto"
+      @didDismiss="cerrarQr"
+    >
+      <ion-header>
+        <ion-toolbar color="primary">
+          <ion-title>QR de solicitud #{{ solicitudQrId }}</ion-title>
+
+          <ion-buttons slot="end">
+            <ion-button @click="modalQrAbierto = false">
+              Cerrar
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+
+      <ion-content class="ion-padding">
+        <div v-if="qrUrl" class="qr-contenedor">
+          <p>
+            Escaneá este código para consultar públicamente
+            el estado de tu solicitud.
+          </p>
+
+          <img
+            :src="qrUrl"
+            alt="Código QR de la solicitud"
+            class="imagen-qr"
+          />
+
+          <ion-note color="medium">
+            No es necesario iniciar sesión para consultar la solicitud.
+          </ion-note>
+        </div>
+      </ion-content>
+    </ion-modal>
+
   </ion-page>
 </template>
 
@@ -278,6 +381,7 @@ import {
   IonIcon,
   IonList,
   IonNote,
+  IonModal,
   toastController
 } from '@ionic/vue';
 
@@ -287,15 +391,24 @@ import {
   locationOutline,
   micOutline,
   createOutline,
-  timeOutline
+  timeOutline,
+  qrCodeOutline,
+  downloadOutline,
+  shareSocialOutline
 } from 'ionicons/icons';
+
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 import SelectorUbicacion from '@/components/SelectorUbicacion.vue';
 import FirmaConformidad from '@/components/FirmaConformidad.vue';
 
 import {
   crear_solicitud_api,
-  listar_solicitudes_api
+  listar_solicitudes_api,
+  obtener_qr_solicitud_api,
+  obtener_comprobante_pdf_solicitud_api
 } from '@/servicies/solicitudes_service';
 
 import type {
@@ -378,6 +491,18 @@ const escuchandoVoz = ref(false);
 const modalUbicacionAbierto = ref(false);
 const solicitudParaFirma = ref<SolicitudApi | null>(null);
 const modalFirmaAbierto = ref(false);
+
+
+// QR PÚBLICO
+const modalQrAbierto = ref(false);
+const qrCargandoId = ref<number | null>(null);
+const qrUrl = ref<string | null>(null);
+const solicitudQrId = ref<number | null>(null);
+
+
+// COMPROBANTE PDF
+const pdfProcesandoId = ref<number | null>(null);
+const pdfOperacion = ref<'descargar' | 'compartir' | null>(null);
 
 
 // TOAST
@@ -820,6 +945,285 @@ const finalizarFirma = async () => {
 };
 
 
+// CONVERTIR PDF A BASE64
+const convertirBlobABase64 = (archivo: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+
+    lector.onloadend = () => {
+      if (typeof lector.result !== 'string') {
+        reject(new Error('No se pudo procesar el comprobante PDF.'));
+        return;
+      }
+
+      const base64 = lector.result.split(',')[1];
+
+      if (!base64) {
+        reject(new Error('El comprobante PDF está vacío.'));
+        return;
+      }
+
+      resolve(base64);
+    };
+
+    lector.onerror = () => {
+      reject(new Error('No se pudo leer el archivo PDF.'));
+    };
+
+    lector.readAsDataURL(archivo);
+  });
+};
+
+
+// DESCARGAR COMPROBANTE PDF
+const descargarComprobante = async (item: SolicitudApi) => {
+  if (item.id <= 0) {
+    await mostrarToast(
+      'Primero necesitás sincronizar la solicitud.',
+      'warning'
+    );
+
+    return;
+  }
+
+  if (pdfProcesandoId.value !== null) return;
+
+  pdfProcesandoId.value = item.id;
+  pdfOperacion.value = 'descargar';
+
+  try {
+    const archivo = await obtener_comprobante_pdf_solicitud_api(item.id);
+
+    const nombreArchivo = `comprobante-solicitud-${item.id}.pdf`;
+
+    if (Capacitor.isNativePlatform()) {
+      const base64 = await convertirBlobABase64(archivo);
+
+      await Filesystem.writeFile({
+        path: `Ganica/comprobantes/${nombreArchivo}`,
+        data: base64,
+        directory: Directory.Documents,
+        recursive: true
+      });
+
+      await mostrarToast(
+        'Comprobante guardado en Documentos de Gánica.',
+        'success'
+      );
+
+    } else {
+      const url = URL.createObjectURL(archivo);
+
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = nombreArchivo;
+
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+
+      URL.revokeObjectURL(url);
+
+      await mostrarToast(
+        'Comprobante descargado correctamente.',
+        'success'
+      );
+    }
+
+  } catch (error) {
+    console.error('Error al descargar comprobante:', error);
+
+    await mostrarToast(
+      error instanceof Error
+        ? error.message
+        : 'No se pudo descargar el comprobante.',
+      'danger'
+    );
+
+  } finally {
+    pdfProcesandoId.value = null;
+    pdfOperacion.value = null;
+  }
+};
+
+
+// COMPARTIR COMPROBANTE PDF
+const compartirComprobante = async (item: SolicitudApi) => {
+  if (item.id <= 0) {
+    await mostrarToast(
+      'Primero necesitás sincronizar la solicitud.',
+      'warning'
+    );
+
+    return;
+  }
+
+  if (pdfProcesandoId.value !== null) return;
+
+  pdfProcesandoId.value = item.id;
+  pdfOperacion.value = 'compartir';
+
+  try {
+    const archivo = await obtener_comprobante_pdf_solicitud_api(item.id);
+
+    const nombreArchivo = `comprobante-solicitud-${item.id}.pdf`;
+
+    if (Capacitor.isNativePlatform()) {
+      const base64 = await convertirBlobABase64(archivo);
+
+      // Guardar temporalmente el PDF en la caché.
+      const archivoTemporal = await Filesystem.writeFile({
+        path: `comprobante-solicitud-${item.id}-${Date.now()}.pdf`,
+        data: base64,
+        directory: Directory.Cache
+      });
+
+      // Abrir el menú nativo para compartir el PDF.
+      await Share.share({
+        title: `Comprobante de solicitud #${item.id}`,
+        text: 'Te comparto el comprobante de mi solicitud de Gánica.',
+        files: [archivoTemporal.uri],
+        dialogTitle: 'Compartir comprobante'
+      });
+
+    } else {
+      const archivoCompartir = new File(
+        [archivo],
+        nombreArchivo,
+        { type: 'application/pdf' }
+      );
+
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [archivoCompartir] })
+      ) {
+        await navigator.share({
+          title: `Comprobante de solicitud #${item.id}`,
+          text: 'Te comparto el comprobante de mi solicitud de Gánica.',
+          files: [archivoCompartir]
+        });
+
+      } else {
+        // Si el navegador no permite compartir archivos,
+        // ofrecemos la descarga como alternativa.
+        const url = URL.createObjectURL(archivo);
+
+        const enlace = document.createElement('a');
+        enlace.href = url;
+        enlace.download = nombreArchivo;
+
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+
+        URL.revokeObjectURL(url);
+
+        await mostrarToast(
+          'Tu navegador no permite compartir archivos. Se descargó el comprobante.',
+          'warning'
+        );
+
+        return;
+      }
+    }
+
+    await mostrarToast(
+      'Se abrió el menú para compartir el comprobante.',
+      'success'
+    );
+
+  } catch (error) {
+    console.error('Error al compartir comprobante:', error);
+
+    // El usuario puede cancelar el menú de compartir.
+    if (
+      error instanceof Error &&
+      error.name === 'AbortError'
+    ) {
+      return;
+    }
+
+    await mostrarToast(
+      error instanceof Error
+        ? error.message
+        : 'No se pudo compartir el comprobante.',
+      'danger'
+    );
+
+  } finally {
+    pdfProcesandoId.value = null;
+    pdfOperacion.value = null;
+  }
+};
+
+
+// LIBERAR IMAGEN QR ANTERIOR
+const liberarImagenQr = () => {
+  if (qrUrl.value) {
+    URL.revokeObjectURL(qrUrl.value);
+    qrUrl.value = null;
+  }
+};
+
+
+// GENERAR Y ABRIR QR
+const abrirQr = async (item: SolicitudApi) => {
+  if (item.id <= 0) {
+    await mostrarToast(
+      'Primero necesitás sincronizar la solicitud.',
+      'warning'
+    );
+
+    return;
+  }
+
+  if (qrCargandoId.value !== null) {
+    return;
+  }
+
+  if (pdfProcesandoId.value !== null) {
+    return;
+  }
+
+  qrCargandoId.value = item.id;
+
+  liberarImagenQr();
+
+  try {
+    const imagen = await obtener_qr_solicitud_api(item.id);
+
+    qrUrl.value = URL.createObjectURL(imagen);
+    solicitudQrId.value = item.id;
+    modalQrAbierto.value = true;
+
+  } catch (error) {
+    console.error(
+      'Error al generar el QR:',
+      error
+    );
+
+    await mostrarToast(
+      error instanceof Error
+        ? error.message
+        : 'No se pudo generar el código QR.',
+      'danger'
+    );
+
+  } finally {
+    qrCargandoId.value = null;
+  }
+};
+
+
+// CERRAR QR Y LIBERAR MEMORIA
+const cerrarQr = () => {
+  modalQrAbierto.value = false;
+  liberarImagenQr();
+  solicitudQrId.value = null;
+};
+
+
 // FORMATEAR FECHA
 const formatearFecha = (fecha: string) => {
   if (!fecha) return 'Sin fecha';
@@ -872,6 +1276,8 @@ onUnmounted(() => {
     'online',
     actualizarAlVolverInternet
   );
+
+  liberarImagenQr();
 });
 </script>
 
@@ -912,5 +1318,24 @@ ion-item p {
 
 .estado-firma.pendiente {
   color: var(--ion-color-warning-shade);
+}
+
+.qr-contenedor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  padding: 16px;
+}
+
+.imagen-qr {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  object-fit: contain;
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
 }
 </style>

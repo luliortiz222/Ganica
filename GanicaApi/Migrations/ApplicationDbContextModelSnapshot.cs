@@ -394,6 +394,9 @@ namespace GanicaApi.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("TokenPublico")
+                        .HasColumnType("longtext");
+
                     b.Property<long?>("UsuarioId")
                         .HasColumnType("bigint");
 

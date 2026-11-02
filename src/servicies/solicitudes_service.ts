@@ -1,5 +1,5 @@
-
 import { ajax_request } from "./ajax_service";
+import { obtener_api_url } from "@/config/debug";
 
 export interface CrearSolicitud {
   servicioRecoleccionId: number;
@@ -81,3 +81,76 @@ export async function actualizar_estado_solicitud_api(
     body: JSON.stringify(datos)
   });
 }
+
+// OBTENER QR PÚBLICO DE UNA SOLICITUD
+export async function obtener_qr_solicitud_api(
+  id: number
+): Promise<Blob> {
+
+  const api_url = obtener_api_url();
+
+  if (!api_url) {
+    throw new Error("No se configuró la URL de la API.");
+  }
+
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    throw new Error("No hay una sesión iniciada.");
+  }
+
+  const url =
+    `${api_url.replace(/\/+$/, "")}/Solicitudes/${id}/qr`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `No se pudo generar el QR. Error HTTP: ${response.status}`
+    );
+  }
+
+  return await response.blob();
+}
+
+// OBTENER COMPROBANTE PDF DE UNA SOLICITUD
+export async function obtener_comprobante_pdf_solicitud_api(
+  id: number
+): Promise<Blob> {
+
+  const api_url = obtener_api_url();
+
+  if (!api_url) {
+    throw new Error("No se configuró la URL de la API.");
+  }
+
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    throw new Error("No hay una sesión iniciada.");
+  }
+
+  const url =
+    `${api_url.replace(/\/+$/, "")}/Solicitudes/${id}/pdf`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `No se pudo descargar el comprobante. Error HTTP: ${response.status}`
+    );
+  }
+
+  return await response.blob();
+}
+
