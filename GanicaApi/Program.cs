@@ -116,6 +116,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
+app.UseStaticFiles();
+
 // 3. Middlewares de Autenticación y Autorización (en este orden exacto)[cite: 1]
 app.UseAuthentication();
 app.UseAuthorization();

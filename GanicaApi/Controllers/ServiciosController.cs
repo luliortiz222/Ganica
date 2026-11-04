@@ -17,42 +17,144 @@ namespace GanicaApi.Controllers;
 public class ServiciosController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly IWebHostEnvironment _environment;
 
-    public ServiciosController(ApplicationDbContext context)
+    private const long TamanoMaximoFoto = 5 * 1024 * 1024; // 5 MB
+
+    public ServiciosController(
+        ApplicationDbContext context,
+        IWebHostEnvironment environment)
     {
         _context = context;
+        _environment = environment;
+    }
+
+    // ==========================================
+    // CARPETA Y GUARDADO DE FOTOGRAFÍAS
+    // ==========================================
+
+    private string ObtenerCarpetaUploads()
+    {
+        var webRoot = _environment.WebRootPath;
+
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            webRoot = Path.Combine(
+                _environment.ContentRootPath,
+                "wwwroot"
+            );
+        }
+
+        return Path.Combine(webRoot, "uploads");
+    }
+
+    private async Task<string> GuardarFotoAsync(
+        IFormFile foto,
+        CancellationToken ct)
+    {
+        if (foto.Length > TamanoMaximoFoto)
+        {
+            throw new InvalidOperationException(
+                "La fotografía no puede superar los 5 MB."
+            );
+        }
+
+        var contentType = foto.ContentType?.ToLowerInvariant();
+
+        var extension = contentType switch
+        {
+            "image/jpeg" => ".jpg",
+            "image/png" => ".png",
+            "image/webp" => ".webp",
+            _ => null
+        };
+
+        if (extension == null)
+        {
+            throw new InvalidOperationException(
+                "Formato de fotografía no válido. Usá JPG, PNG o WEBP."
+            );
+        }
+
+        var carpeta = ObtenerCarpetaUploads();
+
+        Directory.CreateDirectory(carpeta);
+
+        var nombreArchivo = $"{Guid.NewGuid()}{extension}";
+        var rutaArchivo = Path.Combine(carpeta, nombreArchivo);
+
+        await using var stream = new FileStream(
+            rutaArchivo,
+            FileMode.CreateNew
+        );
+
+        await foto.CopyToAsync(stream, ct);
+
+        return $"/uploads/{nombreArchivo}";
+    }
+
+    private void EliminarFotoAnterior(string? fotoUrl)
+    {
+        if (string.IsNullOrWhiteSpace(fotoUrl))
+            return;
+
+        // Solo se eliminan archivos de nuestra carpeta uploads.
+        var nombreArchivo = Path.GetFileName(fotoUrl);
+
+        if (string.IsNullOrWhiteSpace(nombreArchivo))
+            return;
+
+        var rutaArchivo = Path.Combine(
+            ObtenerCarpetaUploads(),
+            nombreArchivo
+        );
+
+        if (System.IO.File.Exists(rutaArchivo))
+        {
+            System.IO.File.Delete(rutaArchivo);
+        }
+    }
+
+    private static bool TieneFoto(IFormFile? foto)
+    {
+        return foto != null && foto.Length > 0;
     }
 
     // ==========================================
     // GET: Obtener TODOS los servicios
     // ==========================================
-   [HttpGet]
-[AllowAnonymous]
-public async Task<IActionResult> GetServicios(CancellationToken ct)
-{
-    var servicios = await _context.ServiciosRecoleccion
-        .AsNoTracking()
-        .OrderBy(s => s.Nombre)
-        .Select(s => new
-        {
-            id = s.Id,
-            nombre = s.Nombre,
-            descripcion = s.Descripcion,
-            dias = s.Dias,
-            horario = s.Horario,
-            requiere_solicitud = s.RequiereSolicitud
-        })
-        .ToListAsync(ct);
 
-    return Ok(servicios);
-}
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetServicios(CancellationToken ct)
+    {
+        var servicios = await _context.ServiciosRecoleccion
+            .AsNoTracking()
+            .OrderBy(s => s.Nombre)
+            .Select(s => new
+            {
+                id = s.Id,
+                nombre = s.Nombre,
+                descripcion = s.Descripcion,
+                dias = s.Dias,
+                horario = s.Horario,
+                requiere_solicitud = s.RequiereSolicitud,
+                foto_url = s.FotoUrl
+            })
+            .ToListAsync(ct);
+
+        return Ok(servicios);
+    }
 
     // ==========================================
     // GET: Obtener un servicio por ID
     // ==========================================
+
     [HttpGet("{id}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetServicio(int id, CancellationToken ct)
+    public async Task<IActionResult> GetServicio(
+        int id,
+        CancellationToken ct)
     {
         var servicio = await _context.ServiciosRecoleccion
             .AsNoTracking()
@@ -64,13 +166,17 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
                 descripcion = s.Descripcion,
                 dias = s.Dias,
                 horario = s.Horario,
-                requiere_solicitud = s.RequiereSolicitud
+                requiere_solicitud = s.RequiereSolicitud,
+                foto_url = s.FotoUrl
             })
             .FirstOrDefaultAsync(ct);
 
         if (servicio == null)
         {
-            return NotFound(new { mensaje = "El servicio solicitado no existe." });
+            return NotFound(new
+            {
+                mensaje = "El servicio solicitado no existe."
+            });
         }
 
         return Ok(servicio);
@@ -79,6 +185,7 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
     // ==========================================
     // POST: Crear un servicio
     // ==========================================
+
     [HttpPost]
     public async Task<IActionResult> CrearServicio(
         [FromForm] ServicioRecoleccion dto,
@@ -107,31 +214,19 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
             });
         }
 
-        // Guardar fotografía si se recibió una.
-        if (foto != null && foto.Length > 0)
-        {
-            var uploadsFolder = Path.Combine(
-                Directory.GetCurrentDirectory(),
-                "wwwroot",
-                "uploads"
-            );
-
-            Directory.CreateDirectory(uploadsFolder);
-
-            var uniqueFileName =
-                $"{Guid.NewGuid()}_{Path.GetFileName(foto.FileName)}";
-
-            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-            using var stream = new FileStream(filePath, FileMode.Create);
-
-            await foto.CopyToAsync(stream, ct);
-
-            // Si el modelo incorpora FotoUrl, guardar aquí la ruta.
-            // dto.FotoUrl = $"/uploads/{uniqueFileName}";
-        }
-
         dto.Nombre = dto.Nombre.Trim();
+
+        if (TieneFoto(foto))
+        {
+            try
+            {
+                dto.FotoUrl = await GuardarFotoAsync(foto!, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+        }
 
         _context.ServiciosRecoleccion.Add(dto);
 
@@ -140,13 +235,23 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
         return CreatedAtAction(
             nameof(GetServicio),
             new { id = dto.Id },
-            dto
+            new
+            {
+                id = dto.Id,
+                nombre = dto.Nombre,
+                descripcion = dto.Descripcion,
+                dias = dto.Dias,
+                horario = dto.Horario,
+                requiere_solicitud = dto.RequiereSolicitud,
+                foto_url = dto.FotoUrl
+            }
         );
     }
 
     // ==========================================
     // PUT: Actualizar un servicio
     // ==========================================
+
     [HttpPut("{id}")]
     public async Task<IActionResult> ActualizarServicio(
         int id,
@@ -194,31 +299,29 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
         servicio.Horario = dto.Horario;
         servicio.RequiereSolicitud = dto.RequiereSolicitud;
 
-        // Actualizar fotografía si se recibió una nueva.
-        if (foto != null && foto.Length > 0)
+        // Conservar la fotografía anterior si no se recibió otra.
+        if (TieneFoto(foto))
         {
-            var uploadsFolder = Path.Combine(
-                Directory.GetCurrentDirectory(),
-                "wwwroot",
-                "uploads"
-            );
+            var fotoAnterior = servicio.FotoUrl;
 
-            Directory.CreateDirectory(uploadsFolder);
+            try
+            {
+                servicio.FotoUrl = await GuardarFotoAsync(foto!, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
 
-            var uniqueFileName =
-                $"{Guid.NewGuid()}_{Path.GetFileName(foto.FileName)}";
+            await _context.SaveChangesAsync(ct);
 
-            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-            using var stream = new FileStream(filePath, FileMode.Create);
-
-            await foto.CopyToAsync(stream, ct);
-
-            // Si el modelo incorpora FotoUrl, guardar aquí la ruta.
-            // servicio.FotoUrl = $"/uploads/{uniqueFileName}";
+            // Eliminar la foto anterior solo después de guardar correctamente.
+            EliminarFotoAnterior(fotoAnterior);
         }
-
-        await _context.SaveChangesAsync(ct);
+        else
+        {
+            await _context.SaveChangesAsync(ct);
+        }
 
         return Ok(new
         {
@@ -227,20 +330,22 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
             descripcion = servicio.Descripcion,
             dias = servicio.Dias,
             horario = servicio.Horario,
-            requiere_solicitud = servicio.RequiereSolicitud
+            requiere_solicitud = servicio.RequiereSolicitud,
+            foto_url = servicio.FotoUrl
         });
     }
 
     // ==========================================
     // DELETE: Eliminar un servicio
     // ==========================================
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> EliminarServicio(
         int id,
         CancellationToken ct)
     {
         var servicio = await _context.ServiciosRecoleccion
-            .FindAsync(new object[] { id }, ct);
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
 
         if (servicio == null)
         {
@@ -250,9 +355,13 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
             });
         }
 
+        var fotoAnterior = servicio.FotoUrl;
+
         _context.ServiciosRecoleccion.Remove(servicio);
 
         await _context.SaveChangesAsync(ct);
+
+        EliminarFotoAnterior(fotoAnterior);
 
         return Ok(new
         {
@@ -263,6 +372,7 @@ public async Task<IActionResult> GetServicios(CancellationToken ct)
     // ==========================================
     // GET: Generar comprobante PDF con QR
     // ==========================================
+
     [HttpGet("{id}/pdf")]
     public async Task<IActionResult> DescargarPdf(
         int id,

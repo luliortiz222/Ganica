@@ -1,3 +1,4 @@
+
 <script setup lang="ts">
 import {
   ref,
@@ -60,6 +61,10 @@ import {
 import ModalServicio from '@/components/ModalServicio.vue';
 
 import {
+  obtener_api_url
+} from '@/config/debug';
+
+import {
   obtener_bandeja_notificaciones,
   marcar_notificacion_leida
 } from '@/servicies/notificaciones_service';
@@ -93,7 +98,6 @@ const obtenerRolActual = (): string => {
   const usuario = obtenerUsuarioActual();
   const rol = usuario?.rol;
 
-  // Admite tanto rol como texto como rol.codigo.
   if (typeof rol === 'string') {
     return rol.trim().toLowerCase();
   }
@@ -105,11 +109,9 @@ const obtenerRolActual = (): string => {
   return '';
 };
 
-// El usuario y el rol son reactivos.
 const usuarioSesion = ref(obtenerUsuarioActual());
 const rolSesion = ref(obtenerRolActual());
 
-// Actualiza ambos datos cuando cambia la sesión.
 const actualizarRolSesion = () => {
   usuarioSesion.value = obtenerUsuarioActual();
   rolSesion.value = obtenerRolActual();
@@ -131,7 +133,6 @@ const puedeGestionarSolicitudes = computed(
   () => esAdministrador.value || esRecolector.value
 );
 
-// El saludo ahora utiliza el usuario reactivo.
 const nombreUsuario = computed(() => {
   const usuario = usuarioSesion.value;
 
@@ -154,21 +155,19 @@ const recargarInicio = async () => {
   recargandoInicio.value = true;
 
   try {
-    // Leer el usuario y el rol actuales.
     actualizarRolSesion();
 
-    // Actualizar el tema.
     esOscuro.value = obtenerTemaGuardado();
 
-    // Recargar los servicios según el rol.
     if (!esVecino.value) {
       await servicios_store.cargar_servicios();
     }
 
-    // Actualizar las notificaciones.
     await cargarNotificaciones();
+
   } catch (error) {
     console.error('Error al recargar Inicio:', error);
+
   } finally {
     recargandoInicio.value = false;
   }
@@ -214,6 +213,7 @@ const cargarNotificaciones = async () => {
     if (res.ok) {
       notificaciones.value = res.notificaciones ?? [];
     }
+
   } catch (error) {
     console.error(
       'Error al cargar las notificaciones:',
@@ -249,6 +249,7 @@ const marcarComoLeida = async (notificacion: any) => {
 
     if (res.ok) {
       notificacion.leidaEn = new Date().toISOString();
+
     } else {
       const alerta = await alertController.create({
         header: 'No se pudo marcar como leída',
@@ -260,6 +261,7 @@ const marcarComoLeida = async (notificacion: any) => {
 
       await alerta.present();
     }
+
   } catch (error) {
     console.error(
       'Error al marcar la notificación como leída:',
@@ -280,7 +282,6 @@ const marcarComoLeida = async (notificacion: any) => {
 
 // ==========================================
 // ACTUALIZAR ESTADO DE UNA SOLICITUD
-// La firma del vecino es la que finaliza el retiro.
 // ==========================================
 
 const actualizarEstadoSolicitud = async (
@@ -357,6 +358,7 @@ const actualizarEstadoSolicitud = async (
     await alerta.present();
 
     await cargarNotificaciones();
+
   } catch (error) {
     console.error(
       'Error al actualizar el estado de la solicitud:',
@@ -372,6 +374,7 @@ const actualizarEstadoSolicitud = async (
     });
 
     await alerta.present();
+
   } finally {
     estadosActualizando.value =
       estadosActualizando.value.filter(
@@ -399,6 +402,28 @@ const hay_servicios = computed(
 const lista = computed(
   () => servicios_store.lista
 );
+
+// ==========================================
+// FOTOGRAFÍAS DE LOS SERVICIOS
+// ==========================================
+
+const obtenerFotoServicio = (
+  servicio: Servicio
+): string | null => {
+  const ruta = (servicio as any).foto_url;
+
+  if (!ruta || typeof ruta !== 'string') {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(ruta)) {
+    return ruta;
+  }
+
+  const baseApi = obtener_api_url().replace(/\/api\/?$/i, '');
+
+  return `${baseApi}${ruta.startsWith('/') ? '' : '/'}${ruta}`;
+};
 
 // ==========================================
 // NOTIFICACIONES SIN LEER
@@ -486,6 +511,7 @@ const verificarPermisoAdministrador =
       }
 
       return true;
+
     } catch {
       const alerta = await alertController.create({
         header: 'No se pudo verificar tu acceso',
@@ -653,7 +679,9 @@ const alternarTema = () => {
     </ion-header>
 
     <ion-content class="ion-padding">
+
       <!-- INICIO DEL VECINO -->
+
       <section v-if="esVecino" class="bienvenida">
         <p class="sobrelinea">GESTIÓN DE RECOLECCIÓN</p>
 
@@ -761,6 +789,7 @@ const alternarTema = () => {
       </section>
 
       <!-- INICIO DEL ADMINISTRADOR -->
+
       <section
         v-else-if="esAdministrador"
         class="bienvenida"
@@ -816,6 +845,7 @@ const alternarTema = () => {
       </section>
 
       <!-- INICIO DEL RECOLECTOR -->
+
       <section
         v-else-if="esRecolector"
         class="bienvenida"
@@ -871,6 +901,7 @@ const alternarTema = () => {
       </section>
 
       <!-- USUARIO SIN ROL RECONOCIDO -->
+
       <section
         v-else
         class="estado-contenedor"
@@ -889,6 +920,7 @@ const alternarTema = () => {
       </section>
 
       <!-- BANDEJA DE AVISOS -->
+
       <section v-if="puedeGestionarSolicitudes">
         <ion-card
           class="tarjeta-bandeja"
@@ -916,6 +948,7 @@ const alternarTema = () => {
         </ion-card>
 
         <!-- VENTANA DE AVISOS -->
+
         <div
           v-if="mostrarAvisos"
           class="bandeja-avisos"
@@ -988,6 +1021,7 @@ const alternarTema = () => {
                     </p>
 
                     <!-- ESTADOS DE LA SOLICITUD -->
+
                     <div
                       v-if="
                         notificacion.leidaEn &&
@@ -1090,6 +1124,7 @@ const alternarTema = () => {
       </section>
 
       <!-- SERVICIOS DE RECOLECCIÓN -->
+
       <section
         v-if="!esVecino && (esAdministrador || esRecolector)"
       >
@@ -1108,6 +1143,7 @@ const alternarTema = () => {
         </div>
 
         <!-- CARGANDO -->
+
         <div v-if="cargando">
           <ion-card
             v-for="n in 3"
@@ -1142,6 +1178,7 @@ const alternarTema = () => {
         </div>
 
         <!-- ERROR -->
+
         <div
           v-else-if="error"
           class="estado-contenedor"
@@ -1164,6 +1201,7 @@ const alternarTema = () => {
         </div>
 
         <!-- SIN SERVICIOS -->
+
         <div
           v-else-if="!hay_servicios"
           class="estado-contenedor"
@@ -1179,6 +1217,7 @@ const alternarTema = () => {
         </div>
 
         <!-- LISTA DE SERVICIOS -->
+
         <div v-else>
           <ion-card
             v-for="s in lista"
@@ -1191,6 +1230,7 @@ const alternarTema = () => {
                 </ion-card-title>
 
                 <!-- Acciones exclusivas del administrador -->
+
                 <div v-if="esAdministrador">
                   <ion-button
                     fill="clear"
@@ -1221,6 +1261,19 @@ const alternarTema = () => {
             </ion-card-header>
 
             <ion-card-content>
+
+              <!-- FOTOGRAFÍA DEL SERVICIO -->
+
+              <div
+                v-if="obtenerFotoServicio(s)"
+                class="foto-servicio"
+              >
+                <img
+                  :src="obtenerFotoServicio(s)!"
+                  :alt="`Fotografía de ${s.nombre || s.titulo}`"
+                />
+              </div>
+
               <p>
                 {{ s.descripcion || s.detalle }}
               </p>
@@ -1235,11 +1288,13 @@ const alternarTema = () => {
               <p v-if="s.horario">
                 <strong>Horario:</strong> {{ s.horario }}
               </p>
+
             </ion-card-content>
           </ion-card>
         </div>
 
         <!-- AGREGAR SERVICIO: SOLO ADMINISTRADOR -->
+
         <ion-fab
           v-if="esAdministrador"
           vertical="bottom"
@@ -1255,6 +1310,7 @@ const alternarTema = () => {
         </ion-fab>
 
         <!-- MODAL DE SERVICIOS -->
+
         <ModalServicio
           :abierto="modalAbierto"
           :servicioEditar="servicioAEditar"
@@ -1469,6 +1525,23 @@ const alternarTema = () => {
   margin-top: 8px;
 }
 
+/* FOTOGRAFÍAS DE LOS SERVICIOS */
+
+.foto-servicio {
+  width: 100%;
+  margin-bottom: 15px;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.foto-servicio img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
 .estado-contenedor {
   display: flex;
   flex-direction: column;
@@ -1490,6 +1563,7 @@ const alternarTema = () => {
 }
 
 /* Alertas de GANICA */
+
 :global(.alerta-ganica .alert-wrapper) {
   border-radius: 20px;
   --background: var(--ion-background-color, #ffffff);

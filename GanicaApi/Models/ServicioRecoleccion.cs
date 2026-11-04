@@ -8,4 +8,6 @@ public class ServicioRecoleccion
     public string Dias { get; set; } = string.Empty;
     public string Horario { get; set; } = string.Empty;
     public bool RequiereSolicitud { get; set; }
+
+      public string? FotoUrl { get; set; }
 }

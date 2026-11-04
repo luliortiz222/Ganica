@@ -336,6 +336,9 @@ namespace GanicaApi.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("FotoUrl")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Horario")
                         .IsRequired()
                         .HasColumnType("longtext");
