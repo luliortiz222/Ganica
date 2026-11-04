@@ -1,4 +1,5 @@
 
+
 <script setup lang="ts">
 import {
   ref,
@@ -410,7 +411,16 @@ const lista = computed(
 const obtenerFotoServicio = (
   servicio: Servicio
 ): string | null => {
-  const ruta = (servicio as any).foto_url;
+  // Primero usar la fotografía guardada físicamente
+  // como Blob en IndexedDB.
+  const fotoLocal = servicio.foto_local;
+
+  if (fotoLocal) {
+    return fotoLocal;
+  }
+
+  // Si todavía no hay copia local, usar la URL del servidor.
+  const ruta = servicio.foto_url;
 
   if (!ruta || typeof ruta !== 'string') {
     return null;

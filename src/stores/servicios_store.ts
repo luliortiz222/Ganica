@@ -1,3 +1,4 @@
+
 import { ref, computed } from "vue";
 import {
   obtener_servicios_api,
@@ -5,6 +6,7 @@ import {
   actualizar_servicio_api,
   eliminar_servicio_api
 } from "@/servicies/servicios_service";
+import { obtenerFotoOffline } from "@/servicies/fotos_offline_service";
 
 export interface Servicio {
   id: number | string;
@@ -15,6 +17,8 @@ export interface Servicio {
   dias?: string;
   horario?: string;
   requiere_solicitud?: boolean;
+  foto_url?: string | null;
+  foto_local?: string | null;
 }
 
 // Variables de estado globales
@@ -31,7 +35,25 @@ const cargar_servicios = async () => {
 
   try {
     const data = await obtener_servicios_api();
-    servicios.value = Array.isArray(data) ? data : [];
+    const serviciosRecibidos = Array.isArray(data) ? data : [];
+
+    // Recuperar o guardar las fotografías para poder verlas sin conexión.
+    const serviciosConFotos = await Promise.all(
+      serviciosRecibidos.map(async (servicio) => {
+        const fotoLocal = await obtenerFotoOffline(
+          servicio.id,
+          servicio.foto_url
+        );
+
+        return {
+          ...servicio,
+          foto_local: fotoLocal
+        };
+      })
+    );
+
+    servicios.value = serviciosConFotos;
+
   } catch (err: any) {
     console.error("Error al cargar servicios:", err);
     error.value =
@@ -47,7 +69,10 @@ const crear_servicio = async (datos: FormData | Partial<Servicio>) => {
   await cargar_servicios();
 };
 
-const editar_servicio = async (id: string | number, datos: FormData | Partial<Servicio>) => {
+const editar_servicio = async (
+  id: string | number,
+  datos: FormData | Partial<Servicio>
+) => {
   await actualizar_servicio_api(id, datos);
   await cargar_servicios();
 };
