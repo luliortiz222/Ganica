@@ -143,6 +143,48 @@ onUnmounted(() => {
 
 <style>
 ion-tab-bar {
+  --background: #ffffff;
+  --color: #929292;
+  --color-selected: var(--ion-color-primary);
+  height: 60px;
+  padding: 4px 10px;
+  border-top: 1px solid #eeeeee;
+}
+
+ion-tab-button {
+  --background: transparent;
+  --color: #929292;
+  --color-selected: var(--ion-color-primary);
+  --ripple-color: transparent;
+  min-width: 0;
+  flex: 1;
+}
+
+ion-tab-button ion-icon {
+  font-size: 21px;
+}
+
+ion-tab-button ion-label {
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+ion-tab-button.tab-selected ion-icon {
+  font-size: 22px;
+}
+
+/* MODO OSCURO */
+body.dark ion-tab-bar {
+  --background: #000000;
+  --color: #cccccc;
+  --color-selected: var(--ion-color-primary);
+  border-top: 1px solid #333333;
+}
+
+body.dark ion-tab-button {
+  --background: transparent;
+  --color: #cccccc;
   --color-selected: var(--ion-color-primary);
 }
 

@@ -1,5 +1,6 @@
 
 import { Capacitor } from '@capacitor/core';
+
 import {
   PushNotifications,
   Token
@@ -16,6 +17,33 @@ const TOKEN_FCM_KEY = 'ganica_fcm_token';
 let inicializado = false;
 let tokenFCM: string | null = null;
 let idNotificacionLocal = 1000;
+
+/**
+ * Crear los canales de notificaciones de Android.
+ */
+async function crearCanalesNotificaciones(): Promise<void> {
+  if (Capacitor.getPlatform() !== 'android') return;
+
+  await PushNotifications.createChannel({
+    id: 'avisos',
+    name: 'Avisos de Gánica',
+    description: 'Notificaciones de solicitudes y recolección',
+    importance: 5,
+    visibility: 1,
+    sound: 'default'
+  });
+
+  await LocalNotifications.createChannel({
+    id: 'avisos',
+    name: 'Avisos de Gánica',
+    description: 'Notificaciones de solicitudes y recolección',
+    importance: 5,
+    visibility: 1,
+    sound: 'default'
+  });
+
+  console.log('Push: canales de notificaciones creados.');
+}
 
 /**
  * Enviar el token del dispositivo a la API.
@@ -61,6 +89,7 @@ async function registrarTokenEnServidor(
     console.log(
       'Push: dispositivo registrado correctamente.'
     );
+
   } catch (error) {
     console.error(
       'Push: error al registrar el dispositivo:',
@@ -70,8 +99,8 @@ async function registrarTokenEnServidor(
 }
 
 /**
- * Mostrar una notificación local cuando llega un push
- * mientras Gánica está abierta.
+ * Mostrar notificación local cuando llega un push
+ * con Gánica abierta.
  */
 async function mostrarNotificacionConAppAbierta(
   titulo: string,
@@ -81,8 +110,8 @@ async function mostrarNotificacionConAppAbierta(
     const permisos = await LocalNotifications.checkPermissions();
 
     if (permisos.display !== 'granted') {
-      console.log(
-        'Push: no se pueden mostrar notificaciones locales porque falta el permiso.'
+      console.warn(
+        'Push: falta permiso para mostrar notificaciones locales.'
       );
       return;
     }
@@ -102,11 +131,12 @@ async function mostrarNotificacionConAppAbierta(
     });
 
     console.log(
-      'Push: notificación visible generada con la aplicación abierta.'
+      'Push: notificación local programada correctamente.'
     );
+
   } catch (error) {
     console.error(
-      'Push: error al mostrar la notificación local:',
+      'Push: error al mostrar notificación local:',
       error
     );
   }
@@ -116,11 +146,12 @@ async function mostrarNotificacionConAppAbierta(
  * Inicializar las notificaciones push.
  */
 export async function iniciar_push_service(): Promise<void> {
+
   if (inicializado) return;
 
   if (!Capacitor.isNativePlatform()) {
     console.log(
-      'Push: las notificaciones se inicializan solamente en dispositivos nativos.'
+      'Push: las notificaciones requieren una plataforma nativa.'
     );
     return;
   }
@@ -128,72 +159,79 @@ export async function iniciar_push_service(): Promise<void> {
   inicializado = true;
 
   try {
-    // Crear el canal de notificaciones de Android.
-    if (Capacitor.getPlatform() === 'android') {
-      await PushNotifications.createChannel({
-        id: 'avisos',
-        name: 'Avisos de Gánica',
-        description: 'Notificaciones de solicitudes y recolección',
-        importance: 5,
-        visibility: 1,
-        sound: 'default'
-      });
-    }
 
-    // Escuchar cuando Firebase entrega el token.
+    // 1. Crear canales.
+    await crearCanalesNotificaciones();
+
+    // 2. Escuchar recepción del token FCM.
     await PushNotifications.addListener(
       'registration',
       async (token: Token) => {
+
         tokenFCM = token.value;
 
         console.log(
-          'Push: token del dispositivo recibido correctamente.'
+          'Push: token FCM recibido correctamente.'
         );
 
         await registrarTokenEnServidor(token.value);
       }
     );
 
-    // Escuchar errores de registro.
+    // 3. Errores de registro.
     await PushNotifications.addListener(
       'registrationError',
       (error) => {
         console.error(
-          'Push: error al obtener el token:',
+          'Push: error al obtener token FCM:',
           error
         );
       }
     );
 
-    // Escuchar notificaciones recibidas con la app abierta.
+    // 4. Recibir notificaciones con Gánica abierta.
     await PushNotifications.addListener(
       'pushNotificationReceived',
       async (notification) => {
-        console.log(
-          'Push: notificación recibida:',
-          notification.title,
-          notification.body
-        );
 
+        console.log('🔔 ===== PUSH RECIBIDO EN GÁNICA =====');
+console.log('📩 Notificación completa:', notification);
+console.log('📌 Título:', notification.title);
+console.log('💬 Mensaje:', notification.body);
+console.log('📦 Datos:', notification.data);
+console.log('🕒 Fecha:', new Date().toLocaleString());
+console.log('🔔 =================================');
+
+        // Mostrar cartel emergente de Android.
         await mostrarNotificacionConAppAbierta(
           notification.title || 'Gánica',
           notification.body || 'Tenés una nueva notificación.'
         );
-      }
-    );
 
-    // Escuchar cuando el usuario toca una notificación.
-    await PushNotifications.addListener(
-      'pushNotificationActionPerformed',
-      (action) => {
-        console.log(
-          'Push: el usuario abrió una notificación:',
-          action.notification
+        // Actualizar pantallas de la aplicación.
+        window.dispatchEvent(
+          new Event('ganica-notificaciones-actualizadas')
         );
       }
     );
 
-    // Solicitar permisos de notificaciones push.
+    // 5. Cuando el usuario toca una notificación.
+    await PushNotifications.addListener(
+      'pushNotificationActionPerformed',
+      (action) => {
+
+        console.log(
+          'Push: usuario abrió la notificación:',
+          action.notification
+        );
+
+        window.dispatchEvent(
+          new Event('ganica-notificaciones-actualizadas')
+        );
+      }
+    );
+
+    // 6. Comprobar permisos push.
     let permisos = await PushNotifications.checkPermissions();
 
     if (permisos.receive === 'prompt') {
@@ -201,25 +239,32 @@ export async function iniciar_push_service(): Promise<void> {
     }
 
     if (permisos.receive !== 'granted') {
-      console.log(
-        'Push: el usuario no concedió permiso para notificaciones.'
+      console.warn(
+        'Push: el usuario no concedió permisos.'
       );
+      inicializado = false;
       return;
     }
 
-    // Solicitar permiso para notificaciones locales.
-    const permisosLocales =
+    // 7. Comprobar permisos locales.
+    let permisosLocales =
       await LocalNotifications.checkPermissions();
 
     if (permisosLocales.display !== 'granted') {
-      await LocalNotifications.requestPermissions();
+      permisosLocales =
+        await LocalNotifications.requestPermissions();
     }
 
-    // Solicitar el registro en Firebase.
+    if (permisosLocales.display !== 'granted') {
+      console.warn(
+        'Push: no se concedieron permisos de notificaciones locales.'
+      );
+    }
+
+    // 8. Registrar dispositivo en Firebase.
     await PushNotifications.register();
 
-    // Si ya había un token guardado, intentar registrarlo
-    // para la sesión actual.
+    // 9. Recuperar token guardado.
     const tokenGuardado = localStorage.getItem(TOKEN_FCM_KEY);
 
     if (tokenGuardado) {
@@ -227,7 +272,7 @@ export async function iniciar_push_service(): Promise<void> {
       await registrarTokenEnServidor(tokenGuardado);
     }
 
-    // Registrar el dispositivo cuando cambia la sesión.
+    // 10. Registrar nuevamente el dispositivo al cambiar sesión.
     window.addEventListener(
       'sesion-actualizada',
       () => {
@@ -242,10 +287,11 @@ export async function iniciar_push_service(): Promise<void> {
     );
 
   } catch (error) {
+
     inicializado = false;
 
     console.error(
-      'Push: error al inicializar el servicio:',
+      'Push: error al inicializar:',
       error
     );
   }

@@ -620,7 +620,7 @@ public class SolicitudesController : ControllerBase
             solicitud.FirmaConformidadFecha = DateTimeOffset.UtcNow;
             solicitud.Estado = "Finalizada";
 
-            _context.HistorialSolicitudes.Add(
+                        _context.HistorialSolicitudes.Add(
                 new HistorialSolicitud
                 {
                     SolicitudId = solicitud.Id,
@@ -633,6 +633,43 @@ public class SolicitudesController : ControllerBase
                         "El vecino registró su firma de conformidad. La solicitud quedó finalizada."
                 });
 
+            // Buscar administradores activos y recolectores
+            // que recibieron originalmente esta solicitud.
+            var destinatarios = await _context.Usuarios
+                .Include(u => u.Rol)
+                .Where(u =>
+                    u.Activo &&
+                    u.Rol != null &&
+                    (
+                        u.Rol.Codigo == "administrador" ||
+                        (
+                            u.Rol.Codigo == "recolector" &&
+                            _context.Notificaciones.Any(n =>
+                                n.SolicitudId == solicitud.Id &&
+                                n.UsuarioId == u.Id)
+                        )
+                    ))
+                .ToListAsync();
+
+            // Notificar que el vecino firmó y la solicitud finalizó.
+            foreach (var destinatario in destinatarios)
+            {
+                _context.Notificaciones.Add(new Notificacion
+                {
+                    UsuarioId = destinatario.Id,
+                    SolicitudId = solicitud.Id,
+                    Titulo = "Solicitud finalizada",
+                    Mensaje =
+                        $"El vecino registró la conformidad. " +
+                        $"La solicitud de {solicitud.TipoResiduo} " +
+                        $"(N.º {solicitud.Id}) quedó finalizada.",
+                    Tipo = TipoNotificacion.Estado,
+                    CreadoEn = DateTimeOffset.UtcNow
+                });
+            }
+
+            // Guardar firma, historial y notificaciones.
+            // El interceptor existente enviará las notificaciones push.
             await _context.SaveChangesAsync();
 
             return Ok(new
