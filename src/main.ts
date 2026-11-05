@@ -6,6 +6,7 @@ import router from './router';
 import { IonicVue } from '@ionic/vue';
 import { createPinia } from 'pinia';
 import { iniciar_offline_service } from './servicies/offline_service';
+import { iniciar_push_service } from './servicies/push_service';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 
 /* Core CSS required for Ionic components to work properly */
@@ -40,7 +41,7 @@ app
   .use(router)
   .use(pinia);
 
-/* INICIALIZAR GOOGLE Y ARRANCAR LA APLICACIÓN */
+/* INICIALIZAR GOOGLE, PUSH Y ARRANCAR LA APLICACIÓN */
 const iniciarAplicacion = async () => {
   try {
     await SocialLogin.initialize({
@@ -57,6 +58,16 @@ const iniciarAplicacion = async () => {
 
   await router.isReady();
   app.mount('#app');
+
+  // Inicializar notificaciones push después de montar la aplicación.
+  try {
+    await iniciar_push_service();
+  } catch (error) {
+    console.error(
+      'Error al iniciar las notificaciones push:',
+      error
+    );
+  }
 };
 
 iniciarAplicacion();

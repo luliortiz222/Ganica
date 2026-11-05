@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "9492405865",
+    "project_id": "ganica-2a63e",
+    "storage_bucket": "ganica-2a63e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:9492405865:android:2f29dbe57a7641fa948cf8",
+        "android_client_info": {
+          "package_name": "io.ionic.starter"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "9492405865-9m3cu3m9gip3jaa1tgjcb13dhij3nl75.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwSa8mH_6UDl24ncRGzTDAvQZfom-Tm7c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "9492405865-9m3cu3m9gip3jaa1tgjcb13dhij3nl75.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

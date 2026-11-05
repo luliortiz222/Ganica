@@ -30,3 +30,6 @@ npm-debug.log*
 /platforms
 /plugins
 /www
+
+# Claves privadas de Firebase
+/Ganicasecretos/

@@ -56,6 +56,10 @@
               "target": "Package",
               "version": "[4.2.0, )"
             },
+            "FirebaseAdmin": {
+              "target": "Package",
+              "version": "[3.5.0, )"
+            },
             "Google.Apis.Auth": {
               "target": "Package",
               "version": "[1.78.0, )"

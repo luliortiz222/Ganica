@@ -764,6 +764,24 @@ public class SolicitudesController : ControllerBase
                 : request.Observacion.Trim()
         });
 
+        // Notificar al vecino propietario de la solicitud.
+        if (solicitud.UsuarioId.HasValue)
+{
+    _context.Notificaciones.Add(new Notificacion
+    {
+        UsuarioId = solicitud.UsuarioId.Value,
+        SolicitudId = solicitud.Id,
+        Titulo = "Actualización de tu solicitud",
+        Mensaje =
+            $"Tu solicitud de {solicitud.TipoResiduo} cambió de estado: " +
+            $"{estadoAnterior} → {estadoNuevo}.",
+        Tipo = TipoNotificacion.Estado,
+        CreadoEn = DateTimeOffset.UtcNow
+    });
+}
+
+        // Guardar el nuevo estado, el historial y la notificación.
+        // El interceptor existente enviará el aviso mediante Firebase.
         await _context.SaveChangesAsync();
 
         return Ok(new

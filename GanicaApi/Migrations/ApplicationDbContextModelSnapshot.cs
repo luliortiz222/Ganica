@@ -22,6 +22,44 @@ namespace GanicaApi.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("GanicaApi.Models.DispositivoPush", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Plataforma")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTimeOffset?>("UltimaActualizacion")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("DispositivosPush");
+                });
+
             modelBuilder.Entity("GanicaApi.Models.Entrega", b =>
                 {
                     b.Property<long>("Id")
@@ -449,6 +487,17 @@ namespace GanicaApi.Migrations
                             PasswordHash = "$2a$11$qX7vHwK7hJgY5U7jJg8i2e1u5O0e4J8s7G3f2E1d0C9b8A7m6L5k4",
                             RolId = 1L
                         });
+                });
+
+            modelBuilder.Entity("GanicaApi.Models.DispositivoPush", b =>
+                {
+                    b.HasOne("GanicaApi.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("GanicaApi.Models.HistorialEntrega", b =>

@@ -1,10 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "5ns1henT4Tg=",
+  "dgSpecHash": "o0wZkmxAvqU=",
   "success": true,
   "projectFilePath": "C:\\Users\\Lulim.LOURDES\\GANICAVM\\GanicaApi\\GanicaApi.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\bcrypt.net-next\\4.2.0\\bcrypt.net-next.4.2.0.nupkg.sha512",
+    "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\firebaseadmin\\3.5.0\\firebaseadmin.3.5.0.nupkg.sha512",
+    "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\google.api.gax\\4.13.1\\google.api.gax.4.13.1.nupkg.sha512",
+    "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\google.api.gax.rest\\4.13.1\\google.api.gax.rest.4.13.1.nupkg.sha512",
     "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\google.apis\\1.78.0\\google.apis.1.78.0.nupkg.sha512",
     "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\google.apis.auth\\1.78.0\\google.apis.auth.1.78.0.nupkg.sha512",
     "C:\\Users\\Lulim.LOURDES\\.nuget\\packages\\google.apis.core\\1.78.0\\google.apis.core.1.78.0.nupkg.sha512",
