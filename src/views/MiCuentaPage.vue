@@ -197,12 +197,13 @@
           <!-- DATOS DEL PERFIL -->
           <ion-list lines="full">
             <ion-item>
-              <ion-input
-                v-model="perfil.nombre"
-                label="Nombre completo"
-                label-placement="stacked"
-              />
-            </ion-item>
+  <ion-input
+    :model-value="usuarioInfo.email"
+    label="Correo electrónico"
+    label-placement="stacked"
+    readonly
+  />
+</ion-item>
 
             <ion-item>
               <ion-input
