@@ -574,13 +574,29 @@ const abrirModalEditar = async (
 // ==========================================
 
 const darDeBaja = async (
-  id: string | number
+  id: string | number,
+  requiereSolicitud: boolean
 ) => {
   const esAdmin =
     await verificarPermisoAdministrador();
 
   if (!esAdmin) return;
 
+  // Verificar si el servicio requiere solicitud
+  if (requiereSolicitud) {
+    const aviso = await alertController.create({
+      header: 'No se puede eliminar',
+      message:
+        'Este servicio tiene activa la condición «Requiere solicitud». Por este motivo, no puede darse de baja directamente mientras esta condición esté vigente.',
+      buttons: ['Entendido'],
+      cssClass: 'alerta-ganica'
+    });
+
+    await aviso.present();
+    return;
+  }
+
+  // Confirmar la baja del servicio
   const alerta = await alertController.create({
     header: 'Dar de baja servicio',
     message:
@@ -593,8 +609,27 @@ const darDeBaja = async (
       {
         text: 'Dar de baja',
         role: 'destructive',
-        handler: () => {
-          void servicios_store.eliminar_servicio(id);
+        handler: async () => {
+          try {
+            await servicios_store.eliminar_servicio(id);
+
+          } catch (error: any) {
+            console.error(
+              'Error al eliminar el servicio:',
+              error
+            );
+
+            const aviso = await alertController.create({
+              header: 'No se puede eliminar',
+              message:
+                error?.message ||
+                'No se pudo eliminar el servicio. Intentá nuevamente.',
+              buttons: ['Entendido'],
+              cssClass: 'alerta-ganica'
+            });
+
+            await aviso.present();
+          }
         }
       }
     ],
@@ -1242,34 +1277,36 @@ const alternarTema = () => {
                   {{ s.nombre || s.titulo }}
                 </ion-card-title>
 
-                <!-- Acciones exclusivas del administrador -->
+                
+<!-- Acciones exclusivas del administrador -->
 
-                <div v-if="esAdministrador">
-                  <ion-button
-                    fill="clear"
-                    size="small"
-                    aria-label="Editar servicio"
-                    @click="abrirModalEditar(s)"
-                  >
-                    <ion-icon
-                      slot="icon-only"
-                      :icon="createOutline"
-                    />
-                  </ion-button>
+<div v-if="esAdministrador">
+  <ion-button
+    fill="clear"
+    size="small"
+    aria-label="Editar servicio"
+    @click="abrirModalEditar(s)"
+  >
+    <ion-icon
+      slot="icon-only"
+      :icon="createOutline"
+    />
+  </ion-button>
 
-                  <ion-button
-                    fill="clear"
-                    color="danger"
-                    size="small"
-                    aria-label="Dar de baja servicio"
-                    @click="darDeBaja(s.id)"
-                  >
-                    <ion-icon
-                      slot="icon-only"
-                      :icon="trashBinOutline"
-                    />
-                  </ion-button>
-                </div>
+  <ion-button
+  fill="clear"
+  color="danger"
+  size="small"
+  aria-label="Dar de baja servicio"
+  @click="darDeBaja(s.id, s.requiere_solicitud ?? false)"
+>
+  <ion-icon
+    slot="icon-only"
+    :icon="trashBinOutline"
+  />
+</ion-button>
+</div>
+
               </div>
             </ion-card-header>
 

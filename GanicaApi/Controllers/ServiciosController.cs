@@ -1,4 +1,5 @@
 
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
@@ -353,6 +354,15 @@ public class ServiciosController : ControllerBase
             {
                 mensaje = "El servicio no existe."
             });
+        }
+
+        // No permitir eliminar servicios que requieren solicitud.
+        if (servicio.RequiereSolicitud)
+        {
+           return BadRequest(new
+{
+    mensaje = "No se puede eliminar este servicio. Tiene activa la opción «Requiere solicitud», por lo que no puede darse de baja directamente mientras esa condición esté vigente."
+});
         }
 
         var fotoAnterior = servicio.FotoUrl;

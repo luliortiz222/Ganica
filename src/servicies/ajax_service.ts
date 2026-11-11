@@ -1,3 +1,4 @@
+
 import { obtener_api_url } from "@/config/debug";
 import { offline_store } from "@/stores/offline_store";
 import { offline_queue } from "@/stores/offline_queue";
@@ -78,7 +79,16 @@ export async function ajax_request<T = any>(
 
     if (!response.ok) {
 
-      let mensajeError = `Error HTTP: ${response.status}`;
+      const metodo = (fetchOptions.method || "GET").toUpperCase();
+
+      let mensajeError =
+        response.status === 401 && metodo === "DELETE"
+          ? "No se puede eliminar este servicio porque tiene activa la condición «Requiere solicitud»."
+          : response.status === 401
+            ? "Tu sesión no es válida o expiró. Cerrá sesión e iniciá sesión nuevamente."
+            : response.status === 403
+              ? "No tenés permisos para realizar esta acción."
+              : "No se pudo completar la operación. Intentá nuevamente.";
 
       try {
         const errorData = await response.json();
@@ -171,3 +181,4 @@ export async function ajax_request<T = any>(
     clearTimeout(timeoutId);
   }
 }
+
