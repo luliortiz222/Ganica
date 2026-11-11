@@ -1,5 +1,3 @@
-
-
 <script setup lang="ts">
 import {
   ref,
@@ -228,8 +226,13 @@ const cargarNotificaciones = async () => {
 // ==========================================
 
 const abrirBandeja = async () => {
-  await cargarNotificaciones();
+  if (mostrarAvisos.value) {
+    mostrarAvisos.value = false;
+    return;
+  }
+
   mostrarAvisos.value = true;
+  await cargarNotificaciones();
 };
 
 const cerrarBandeja = () => {
